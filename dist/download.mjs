@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);let bundle;
 const requested=new URLSearchParams(location.search).get('bundle')||'unity09';
-const id=/0[2-7]$/.test(requested)?(requested.startsWith('studio')?'studio09':'unity09'):requested;
+const id=/0[2-8]$/.test(requested)?(requested.startsWith('studio')?'studio09':'unity09'):requested;
 try{
  const response=await fetch('/downloads.json',{cache:'no-store'});if(!response.ok)throw new Error();const manifest=await response.json();bundle=manifest.Bundles[id];if(!bundle&&/08$/.test(id)){const previous=await fetch('/downloads-0.8.json').then(r=>r.json());bundle=previous.Bundles[id];}if(!bundle)throw new Error();
  $('title').textContent=bundle.Title;$('description').textContent=bundle.Description;
