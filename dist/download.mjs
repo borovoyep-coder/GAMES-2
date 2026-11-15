@@ -1,11 +1,11 @@
 const $=id=>document.getElementById(id);let bundle;
-const requested=new URLSearchParams(location.search).get('bundle')||'unity08';
-const id=/0[2-6]$/.test(requested)?(requested.startsWith('studio')?'studio08':'unity08'):requested;
+const requested=new URLSearchParams(location.search).get('bundle')||'unity09';
+const id=/0[2-7]$/.test(requested)?(requested.startsWith('studio')?'studio09':'unity09'):requested;
 try{
- const response=await fetch('/downloads.json',{cache:'no-store'});if(!response.ok)throw new Error();const manifest=await response.json();bundle=manifest.Bundles[id];if(!bundle&&/07$/.test(id)){const previous=await fetch('/downloads-0.7.json').then(r=>r.json());bundle=previous.Bundles[id];}if(!bundle)throw new Error();
+ const response=await fetch('/downloads.json',{cache:'no-store'});if(!response.ok)throw new Error();const manifest=await response.json();bundle=manifest.Bundles[id];if(!bundle&&/08$/.test(id)){const previous=await fetch('/downloads-0.8.json').then(r=>r.json());bundle=previous.Bundles[id];}if(!bundle)throw new Error();
  $('title').textContent=bundle.Title;$('description').textContent=bundle.Description;
  $('download').textContent=`Скачать ZIP · ${(bundle.Bytes/1048576).toFixed(1)} МБ`;$('download').disabled=false;
- $('other').href=id==='unity08'?'?bundle=studio08':'?bundle=unity08';$('other').textContent=id==='unity08'?'Исходники Blender':'Проект Unity';
+ $('other').href=id==='unity09'?'?bundle=studio09':'?bundle=unity09';$('other').textContent=id==='unity09'?'Исходники Blender':'Проект Unity';
 }catch{$('title').textContent='Загрузка временно недоступна';$('description').textContent='Вернитесь к карте и попробуйте снова.';}
 $('download').onclick=async()=>{
  if(!bundle)return;$('download').disabled=true;$('progress').hidden=false;$('progress').value=0;$('status').textContent='Загружаем архив…';

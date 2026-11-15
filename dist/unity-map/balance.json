@@ -9,13 +9,13 @@
   "HeroRespawn": 12,
   "HeroHealth": 1100,
   "MageHealth": 850,
-  "TowerHealth": 1600,
+  "TowerHealth": 3600,
   "CoreHealth": 3600,
   "HeroDamage": 90,
   "MageDamage": 72,
   "MinionHealth": 330,
   "MinionDamage": 32,
-  "TowerDamage": 115,
+  "TowerDamage": 125,
   "CasterHealth": 250,
   "CasterDamage": 40,
   "GuardAttackPeriod": 1,
@@ -28,15 +28,18 @@
   "MinionSpacing": 2.15,
   "TowerLaneReachMargin": 0.35,
   "TowerHealthByTier": [
-    1600,
-    2100,
-    2600
+    3600,
+    4400,
+    5400
   ],
   "TowerDamageByTier": [
-    115,
-    145,
-    175
+    125,
+    155,
+    190
   ],
+  "TowerArmor": 45,
+  "MinionStructureDamageMultiplier": 0.6,
+  "MinionStructureHitCap": 0.04,
   "NeutralHealth": [
     1200,
     600,
