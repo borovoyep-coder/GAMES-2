@@ -1,36 +1,36 @@
 {
-  "Version": "0.6",
+  "Version": "0.7",
   "Bundles": {
-    "unity06": {
-      "Name": "ShatteredWorld_Unity_Ultra_0.6.zip",
-      "Title": "Проект Unity 0.6",
+    "unity07": {
+      "Name": "ShatteredWorld_Unity_Ultra_0.7.zip",
+      "Title": "Проект Unity 0.7",
       "Description": "Готовые модели, код, сцены-генераторы, механики карты и анимации. Для открытия Blender не требуется.",
-      "Bytes": 20853104,
-      "Sha256": "d8ad5063b8acca0acafd718f1a5a8d24001513b0647e9ac2fcd152dfeeedeb5f",
+      "Bytes": 21512389,
+      "Sha256": "554ffe9cc95f0cb75799bfb4e5cf817ec6123801097e5f5735ec4b2ec8fc0e0b",
       "Chunks": [
         {
-          "File": "assets/ShatteredWorld_Unity_Ultra_0.6.zip",
-          "Bytes": 20853104,
-          "Sha256": "d8ad5063b8acca0acafd718f1a5a8d24001513b0647e9ac2fcd152dfeeedeb5f"
+          "File": "assets/ShatteredWorld_Unity_Ultra_0.7.zip",
+          "Bytes": 21512389,
+          "Sha256": "554ffe9cc95f0cb75799bfb4e5cf817ec6123801097e5f5735ec4b2ec8fc0e0b"
         }
       ]
     },
-    "studio06": {
-      "Name": "ShatteredWorld_Blender_Studio_0.6.zip",
-      "Title": "Blender Studio 0.6",
+    "studio07": {
+      "Name": "ShatteredWorld_Blender_Studio_0.7.zip",
+      "Title": "Blender Studio 0.7",
       "Description": "Редактируемая сцена с упакованными текстурами, 39 статических и 100 анимационных FBX. Для пересборки распакуйте поверх проекта Unity.",
-      "Bytes": 32924630,
-      "Sha256": "1e836b59ffee999f94d69095e7820eac6cf1404ce389e28e9f9fa417ef7acaf1",
+      "Bytes": 35456289,
+      "Sha256": "ac392b0ba9db713fbb58b220ef104a9bc08fc3acf60447497c84348593185ade",
       "Chunks": [
         {
-          "File": "assets/ShatteredWorld_Blender_Studio_0.6.zip.part01",
+          "File": "assets/ShatteredWorld_Blender_Studio_0.7.zip.part01",
           "Bytes": 23068672,
-          "Sha256": "19fb2d9907f9507f10eeb0cdf2fdbb46a9ea716a28457cc9838432c7b77b2e83"
+          "Sha256": "92e614124bf05d69a06c8a1aeec7021d2dd5b7b83e7179a04967f3fd2e0fbd03"
         },
         {
-          "File": "assets/ShatteredWorld_Blender_Studio_0.6.zip.part02",
-          "Bytes": 9855958,
-          "Sha256": "8e40d99f415b4e137d459b7016612d5770d479000b3ee348c0e26f933ceffae2"
+          "File": "assets/ShatteredWorld_Blender_Studio_0.7.zip.part02",
+          "Bytes": 12387617,
+          "Sha256": "d9e0fc05cc0a63a5f96b6f44b78a01667be0fd5cd3d590947fd19052272e3064"
         }
       ]
     }

@@ -1,10 +1,10 @@
 const $=id=>document.getElementById(id);let bundle;
-const id=new URLSearchParams(location.search).get('bundle')||'unity06';
+const id=new URLSearchParams(location.search).get('bundle')||'unity07';
 try{
- const response=await fetch('/downloads.json',{cache:'no-store'});if(!response.ok)throw new Error();const manifest=await response.json();bundle=manifest.Bundles[id];if(!bundle&&/05$/.test(id)){const previous=await fetch('/downloads-0.6.json').then(r=>r.json());bundle=previous.Bundles[id];}if(!bundle)throw new Error();
+ const response=await fetch('/downloads.json',{cache:'no-store'});if(!response.ok)throw new Error();const manifest=await response.json();bundle=manifest.Bundles[id];if(!bundle&&/0[56]$/.test(id)){const previous=await fetch('/downloads-0.7.json').then(r=>r.json());bundle=previous.Bundles[id];}if(!bundle)throw new Error();
  $('title').textContent=bundle.Title;$('description').textContent=bundle.Description;
  $('download').textContent=`Скачать ZIP · ${(bundle.Bytes/1048576).toFixed(1)} МБ`;$('download').disabled=false;
- $('other').href=id==='unity06'?'?bundle=studio06':'?bundle=unity06';$('other').textContent=id==='unity06'?'Исходники Blender':'Проект Unity';
+ $('other').href=id==='unity07'?'?bundle=studio07':'?bundle=unity07';$('other').textContent=id==='unity07'?'Исходники Blender':'Проект Unity';
 }catch{$('title').textContent='Загрузка временно недоступна';$('description').textContent='Вернитесь к карте и попробуйте снова.';}
 $('download').onclick=async()=>{
  if(!bundle)return;$('download').disabled=true;$('progress').hidden=false;$('progress').value=0;$('status').textContent='Загружаем архив…';
