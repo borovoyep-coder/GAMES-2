@@ -1,0 +1,6 @@
+PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, eight gates and five bridges
+PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 348 meshes 2270020 vertices 1327412 triangles
+PASS 311 actor transforms, particle tracks and axis conversion
+PASS all eight crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
+PASS descriptions, DOM bindings, local links, shader injection targets and source archive
+VALLEY200 CPU CHECKS PASSED; WebGL rendering/browser interaction not executed.

@@ -1,0 +1,1194 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Долина Осколков — автономный генератор Blender 4.0+.
+
+Запуск: blender -b --python generate_valley.py -- --out ./output --render
+Из Text Editor: Run Script. Создаёт отдельную сцену, не очищает пользовательскую.
+Координаты: X/Y — земля, Z — высота. Размер игровой земли строго 200 x 200.
+Внешние библиотеки, ассеты и аддоны не требуются. Проверено Blender 4.3.2.
+"""
+from __future__ import annotations
+import argparse
+import json
+import math
+import random
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Sequence
+from contextlib import contextmanager
+import bpy
+import bmesh
+from mathutils import Vector
+
+PI = math.pi
+SCENE_NAME = "ValleyOfShards_200"
+PREFIX = "VOS200::"
+
+# -----------------------------------------------------------------------------
+# 1. Декларативная расстановка. Номера T1/T2/T3 соответствуют запросу, не индексам.
+# -----------------------------------------------------------------------------
+TOWERS = {
+    "Top": {"Light": [(3, -65, -20), (2, -65, 20), (1, -65, 50)],
+            "Dark":  [(1, -35, 65), (2, 0, 65), (3, 45, 65)]},
+    "Mid": {"Light": [(3, -55, -55), (2, -40, -35), (1, -15, -15)],
+            "Dark":  [(1, 15, 15), (2, 35, 35), (3, 55, 55)]},
+    "Bot": {"Light": [(3, -40, -65), (2, 0, -65), (1, 40, -65)],
+            "Dark":  [(1, 65, -45), (2, 65, -5), (3, 65, 35)]},
+}
+BASES = {"Light": (-75, -75), "Dark": (75, 75)}
+BOSSES = {"SolarColossus": (-75, 75), "NightLeviathan": (75, -75)}
+CLEARINGS = {"West": (-45, -10), "North": (15, 45),
+             "East": (45, -10), "South": (-15, -45)}
+CAMPS = [
+    (1, "Wolf", (-55, -25)), (2, "Spider", (-55, 15)),
+    (3, "Elemental", (-25, -10)), (4, "Boar", (-40, -45)),
+    (5, "Golem", (0, -50)), (6, "GiantSpider", (30, -45)),
+    (7, "GoldenGolem", (50, 20)), (8, "Wolf", (55, -25)),
+    (9, "ForestSpirit", (25, 0)), (10, "Harpy", (35, 45)),
+    (11, "Bear", (0, 45)), (12, "GiantScorpion", (-25, 45)),
+]
+LANE_CONTROL = {
+    "Top": [(-75,-75),(-65,-62),(-65,-20),(-65,20),(-65,50),
+            (-65,56),(-60.5,60.5),(-56,65),(-35,65),(0,65),(45,65),(62,65),(75,75)],
+    "Mid": [(-75,-75),(-55,-55),(-40,-35),(-15,-15),(0,0),
+            (15,15),(35,35),(55,55),(75,75)],
+    "Bot": [(-75,-75),(-62,-65),(-40,-65),(0,-65),(40,-65),
+            (56,-65),(60.5,-60.5),(65,-56),(65,-45),(65,-5),(65,35),(65,62),(75,75)],
+}
+# Центральный участок — NW -> SE. Концы огибают угловые арены.
+RIVER_CONTROL = [(-49,100),(-50,85),(-52,73),(-60.5,60.5),(-45,45),
+                 (-25,25),(0,0),(25,-25),(45,-45),(60.5,-60.5),
+                 (73,-52),(85,-50),(100,-49)]
+STONE_BRIDGES = [("Top",(-60.5,60.5)), ("Mid",(0,0)), ("Bot",(60.5,-60.5))]
+ENERGY_BRIDGES = [("Dawn",(-30,30)), ("Azure",(30,-30))]
+# У каждой точки есть собственный короткий проход, поперечные стенки и 24 HP.
+CRYSTAL_GATES = [
+    ((-47,3), CLEARINGS["West"]), ((-33,-11), CLEARINGS["West"]),
+    ((-38,25),(-30,30)), ((3,37), CLEARINGS["North"]),
+    ((34,-1), CLEARINGS["East"]), ((53,3), CLEARINGS["East"]),
+    ((24,-34),(30,-30)), ((-3,-34), CLEARINGS["South"]),
+]
+FOREST_PATHS = [
+    [(-65,50),(-81,52),(-83,63),(-75,65)],
+    [(-35,65),(-48,68),(-57,76),(-63,82),(-68,80)],
+    [(40,-65),(52,-82),(63,-83),(66,-77)],
+    [(65,-45),(83,-51),(85,-63),(80,-68)],
+    [(-65,20),(-55,15),(-47,3),(-45,-10),(-55,-25)],
+    [(-55,-55),(-40,-45),(-15,-45),(0,-50),(30,-45),(40,-65)],
+    [(-35,65),(-25,45),(0,45),(15,45),(35,45),(45,65)],
+    [(65,-5),(45,-10),(25,0),(34,-1),(50,20),(65,35)],
+    [(-45,-10),(-33,-11),(-25,-10),(-15,-15)],
+    [(-55,15),(-38,25),(-30,30)],
+    [(15,45),(3,37),(-6,24),(-15,15)],
+    [(45,-10),(53,3),(50,20)],
+    [(30,-45),(24,-34),(30,-30)],
+    [(-15,-45),(-3,-34),(6,-25),(15,-15)],
+]
+
+@dataclass
+class Config:
+    output: Path
+    seed: int = 1649
+    terrain_cells: int = 104
+    tree_count: int = 360
+    bush_count: int = 110
+    road_width: float = 10.4
+    river_half_width: float = 4.0
+    resolution: int = 1440
+    samples: int = 32
+    render: bool = False
+    detail_renders: bool = False
+    labels: bool = True
+    camera_elevation: float = 55.0  # градусов над горизонтальной плоскостью
+    frames: int = 240
+    fps: int = 24
+
+
+def srgb(hex_color: str):
+    h = hex_color.lstrip("#")
+    values = [int(h[i:i+2],16)/255 for i in (0,2,4)]
+    return tuple(v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4 for v in values)
+
+
+def smooth(a,b,x):
+    t = max(0.0,min(1.0,(x-a)/(b-a)))
+    return t*t*(3-2*t)
+
+
+def distance_to_segment(p,a,b):
+    dx,dy = b[0]-a[0],b[1]-a[1]
+    t = max(0,min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy or 1)))
+    return math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dy*t)
+
+
+def route_distance(p,route):
+    return min(distance_to_segment(p,a,b) for a,b in zip(route,route[1:]))
+
+
+def catmull(points,steps=5):
+    result=[]
+    for i in range(len(points)-1):
+        a=Vector(points[max(0,i-1)]);b=Vector(points[i]);c=Vector(points[i+1]);d=Vector(points[min(len(points)-1,i+2)])
+        for j in range(steps):
+            t=j/steps
+            p=(2*b+(-a+c)*t+(2*a-5*b+4*c-d)*t*t+(-a+3*b-3*c+d)*t*t*t)*.5
+            result.append(tuple(p))
+    result.append(tuple(points[-1]))
+    return result
+
+
+def route_length(points):
+    return sum(math.dist(a,b) for a,b in zip(points,points[1:]))
+
+
+def route_sample(points,distance):
+    for a,b in zip(points,points[1:]):
+        length=math.dist(a,b)
+        if distance<=length:
+            t=max(0,distance/length)
+            return tuple(a[i]+(b[i]-a[i])*t for i in range(len(a)))
+        distance-=length
+    return tuple(points[-1])
+
+
+def path_samples(points,spacing):
+    length=route_length(points);n=max(1,math.ceil(length/spacing))
+    return [route_sample(points,length*i/n) for i in range(n+1)]
+
+
+def action_curves(owner):
+    """Legacy Actions (4.0–4.3) и layered/slot Actions (4.4+)."""
+    animation=owner.animation_data
+    if not animation or not animation.action:return []
+    action=animation.action
+    if hasattr(action,"fcurves"):return list(action.fcurves)
+    result=[];slot=getattr(animation,"action_slot",None)
+    for layer in getattr(action,"layers",[]):
+        for strip in layer.strips:
+            if slot is not None and hasattr(strip,"channelbag"):
+                bag=strip.channelbag(slot)
+                if bag:result.extend(bag.fcurves)
+    return result
+
+
+def set_input(node,name,value,old_name=None):
+    socket=node.inputs.get(name) or (node.inputs.get(old_name) if old_name else None)
+    if socket is not None:socket.default_value=value
+
+
+class Context:
+    def __init__(self,config):
+        self.cfg=config;self.rng=random.Random(config.seed)
+        self.materials={};self.cache={};self.parent=None;self.groups={};self.registry={};self.path_layer=0
+        self.lanes={name:catmull(points) for name,points in LANE_CONTROL.items()}
+        self.river=catmull(RIVER_CONTROL,7)
+        self.paths=[catmull(points,3) for points in FOREST_PATHS]
+        self.gates=[]
+        for center,toward in CRYSTAL_GATES:
+            direction=(Vector(toward)-Vector(center)).normalized()
+            self.gates.append([tuple(Vector(center)+direction*s) for s in (-7,7)])
+        self.paths+=self.gates
+        # Повторный запуск заменяет ТОЛЬКО сцену/блоки данных нашего namespace.
+        temporary=None
+        if bpy.context.window and bpy.context.window.scene.name==SCENE_NAME:
+            other=next((s for s in bpy.data.scenes if s.name!=SCENE_NAME),None)
+            if other is None:temporary=bpy.data.scenes.new(PREFIX+"Temporary");other=temporary
+            bpy.context.window.scene=other
+        scene=bpy.data.scenes.get(SCENE_NAME)
+        if scene:bpy.data.scenes.remove(scene)
+        for obj in list(bpy.data.objects):
+            if obj.name.startswith(PREFIX):bpy.data.objects.remove(obj,do_unlink=True)
+        for collection in list(bpy.data.collections):
+            if collection.name.startswith(PREFIX):bpy.data.collections.remove(collection)
+        for blocks in [bpy.data.meshes,bpy.data.curves,bpy.data.materials,bpy.data.cameras,bpy.data.lights,bpy.data.worlds,bpy.data.actions]:
+            for block in list(blocks):
+                if block.name.startswith(PREFIX) and block.users==0:blocks.remove(block)
+        self.scene=bpy.data.scenes.new(SCENE_NAME)
+        if bpy.context.window:bpy.context.window.scene=self.scene
+        if temporary:bpy.data.scenes.remove(temporary)
+        self.scene["generator_version"]="1.0"
+        self.scene["seed"]=config.seed
+        self.scene["playable_bounds"]=[-100,100,-100,100]
+        self.scene["coordinate_system"]="Blender XY ground; Z up"
+        self.group("Terrain")
+        self.font=None
+        for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"]:
+            if Path(path).exists():
+                self.font=bpy.data.fonts.load(path,check_existing=True);break
+
+    def group(self,name):
+        if name not in self.groups:
+            c=bpy.data.collections.new(PREFIX+name);self.scene.collection.children.link(c);self.groups[name]=c
+        self.collection=self.groups[name]
+        return self.collection
+
+    @contextmanager
+    def root(self,name,position=(0,0,0),category=None,rotation=0,scale=1):
+        previous=self.parent
+        obj=bpy.data.objects.new(PREFIX+name,None);self.collection.objects.link(obj)
+        obj.location=position;obj.rotation_euler.z=rotation;obj.scale=(scale,scale,scale)
+        if previous:obj.parent=previous
+        if category:obj["category"]=category
+        self.parent=obj
+        try:yield obj
+        finally:self.parent=previous
+
+    def mesh(self,name,vertices,faces,material,indices=None,uv=None,bevel=0,smooth_faces=False):
+        mesh=bpy.data.meshes.new(PREFIX+name);mesh.from_pydata(vertices,[],faces);mesh.update()
+        materials=[material] if isinstance(material,str) else material
+        for name_ in materials:mesh.materials.append(self.materials[name_])
+        if indices:
+            for p,i in zip(mesh.polygons,indices):p.material_index=i
+        if bevel:
+            bm=bmesh.new();bm.from_mesh(mesh)
+            bmesh.ops.bevel(bm,geom=list(bm.edges),offset=bevel,segments=2,affect="EDGES",clamp_overlap=True)
+            bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces));bm.to_mesh(mesh);bm.free();mesh.update()
+        else:
+            bm=bmesh.new();bm.from_mesh(mesh);bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces));bm.to_mesh(mesh);bm.free();mesh.update()
+        if smooth_faces:
+            for face in mesh.polygons:face.use_smooth=True
+        layer=mesh.uv_layers.new(name="PaintedUV")
+        for loop in mesh.loops:
+            co=mesh.vertices[loop.vertex_index].co
+            layer.data[loop.index].uv=uv[loop.vertex_index] if uv else (co.x*.19+co.z*.08,co.y*.19+co.z*.05)
+        return self.object(name,mesh)
+
+    def object(self,name,data,location=(0,0,0),scale=(1,1,1),rotation=None):
+        obj=bpy.data.objects.new(PREFIX+name,data);self.collection.objects.link(obj)
+        obj.location=location;obj.scale=scale
+        if rotation:obj.rotation_euler=rotation
+        if self.parent:obj.parent=self.parent
+        return obj
+
+    def box(self,name,p,size,mat,bevel=.08,angle=0):
+        key=("box",tuple(size),min(bevel,min(size)*.22),mat)
+        if key not in self.cache:
+            bm=bmesh.new();bmesh.ops.create_cube(bm,size=1)
+            for v in bm.verts:v.co.x*=size[0];v.co.y*=size[1];v.co.z*=size[2]
+            if key[2]:bmesh.ops.bevel(bm,geom=list(bm.edges),offset=key[2],segments=3,affect="EDGES",clamp_overlap=True)
+            bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
+            mesh=bpy.data.meshes.new(PREFIX+name+" prototype");bm.to_mesh(mesh);bm.free();mesh.materials.append(self.materials[mat]);mesh.update()
+            layer=mesh.uv_layers.new(name="PaintedUV")
+            for loop in mesh.loops:
+                v=mesh.vertices[loop.vertex_index].co;layer.data[loop.index].uv=(v.x*.19+v.z*.08,v.y*.19+v.z*.05)
+            self.cache[key]=mesh
+        return self.object(name,self.cache[key],p,rotation=(0,0,angle))
+
+    def sphere(self,name,p,size,mat,level=2):
+        key=("sphere",level,mat)
+        if key not in self.cache:
+            bm=bmesh.new();bmesh.ops.create_icosphere(bm,subdivisions=level,radius=1)
+            mesh=bpy.data.meshes.new(PREFIX+name+" prototype");bm.to_mesh(mesh);bm.free();mesh.materials.append(self.materials[mat]);mesh.update()
+            for f in mesh.polygons:f.use_smooth=True
+            self.cache[key]=mesh
+        return self.object(name,self.cache[key],p,size)
+
+    def loft(self,name,rings,mat,sides=12,bevel=0,smooth_faces=False):
+        verts=[];faces=[]
+        # ring=(x,y,z,radius_x,radius_y), цвета/профиль не зашиты в модель.
+        for x,y,z,rx,ry in rings:
+            verts.extend((x+math.cos(i*2*PI/sides)*rx,y+math.sin(i*2*PI/sides)*ry,z) for i in range(sides))
+        for j in range(1,len(rings)):
+            for i in range(sides):faces.append(((j-1)*sides+i,(j-1)*sides+(i+1)%sides,j*sides+(i+1)%sides,j*sides+i))
+        faces.extend([tuple(reversed(range(sides))),tuple((len(rings)-1)*sides+i for i in range(sides))])
+        return self.mesh(name,verts,faces,mat,bevel=bevel,smooth_faces=smooth_faces)
+
+    def cylinder(self,name,p,radius,depth,mat,sides=20,bevel=.06):
+        return self.loft(name,[(p[0],p[1],p[2]-depth/2,radius,radius),(p[0],p[1],p[2]+depth/2,radius,radius)],mat,sides,bevel)
+
+    def curve(self,name,points,radius,mat,cyclic=False):
+        data=bpy.data.curves.new(PREFIX+name,"CURVE");data.dimensions="3D";data.resolution_u=1;data.bevel_depth=radius;data.bevel_resolution=2
+        spline=data.splines.new("POLY");spline.points.add(len(points)-1)
+        for p,co in zip(spline.points,points):p.co=(*co,1)
+        spline.use_cyclic_u=cyclic;data.materials.append(self.materials[mat])
+        return self.object(name,data)
+
+    def ring(self,name,p,radius,tube,mat):
+        return self.curve(name,[(p[0]+radius*math.cos(i*2*PI/48),p[1]+radius*math.sin(i*2*PI/48),p[2]) for i in range(48)],tube,mat,True)
+
+    def limb(self,name,a,b,r1,r2,mat,sides=10):
+        direction=Vector(b)-Vector(a);length=direction.length
+        obj=self.loft(name,[(0,0,0,r1,r1),(0,0,length*.75,r1*.78+r2*.22,r1*.78+r2*.22),(0,0,length,r2,r2)],mat,sides,smooth_faces=True)
+        obj.location=a;obj.rotation_euler=direction.to_track_quat('Z','Y').to_euler()
+        return obj
+
+    def crystal(self,name,p,radius,height,mat,tilt=(0,0,0)):
+        obj=self.loft(name,[(0,0,0,radius*.58,radius*.58),(0,0,height*.13,radius,radius),
+                            (0,0,height*.73,radius*.81,radius*.81),(0,0,height,0.005,0.005)],mat,6,bevel=.018)
+        obj.location=p;obj.rotation_euler=tilt
+        return obj
+
+    def text(self,name,text,p,size=1.7,mat="Ink",rotation=(0,0,0)):
+        if not self.cfg.labels:return None
+        data=bpy.data.curves.new(PREFIX+name,"FONT");data.body=text;data.align_x="CENTER";data.align_y="CENTER";data.size=size;data.extrude=.003
+        if self.font:data.font=self.font
+        data.materials.append(self.materials[mat]);return self.object(name,data,p,rotation=rotation)
+
+    def height(self,x,y):
+        p=(x,y);rd=route_distance(p,self.river)
+        if rd<self.cfg.river_half_width+1.5:
+            return -2.4*(1-smooth(self.cfg.river_half_width-.4,self.cfg.river_half_width+1.5,rd))
+        lane=min(route_distance(p,r) for r in self.lanes.values())
+        path=min(route_distance(p,r) for r in self.paths)
+        free=min([math.dist(p,v)-10.5 for v in CLEARINGS.values()]+
+                 [math.dist(p,v)-14.7 for v in BASES.values()]+
+                 [math.dist(p,v)-16.5 for v in BOSSES.values()]+
+                 [math.dist(p,c)-5.5 for _,_,c in CAMPS])
+        if free<1:return 0
+        raw=2.1+2.5*math.sin(x*.067+math.sin(y*.051))**2+1.1*math.cos(y*.13+x*.03)**2
+        raw=round(raw/.8)*.8
+        return raw*smooth(6.2,15,lane)*smooth(2.1,8,path)*smooth(0,6,free)
+
+    def clear_for_foliage(self,p,radius=1):
+        if max(abs(p[0]),abs(p[1]))>95:return False
+        if min(route_distance(p,r) for r in self.lanes.values())<self.cfg.road_width/2+radius+1.4:return False
+        if route_distance(p,self.river)<self.cfg.river_half_width+radius+1.2:return False
+        if min(route_distance(p,r) for r in self.paths)<2.1+radius:return False
+        if any(math.dist(p,q)<11.5+radius for q in CLEARINGS.values()):return False
+        if any(math.dist(p,q)<15.8+radius for q in list(BASES.values())+list(BOSSES.values())):return False
+        if any(math.dist(p,q)<5.3+radius for _,_,q in CAMPS):return False
+        if any(math.dist(p,(x,y))<3.3+radius for lanes in TOWERS.values() for entries in lanes.values() for _,x,y in entries):return False
+        if any(math.dist(p,q)<3.1+radius for q,_ in CRYSTAL_GATES):return False
+        if any(math.dist(p,q)<10+radius for _,q in ENERGY_BRIDGES):return False
+        return True
+
+# -----------------------------------------------------------------------------
+# 2. Hand-painted/stylized PBR: цветовая растяжка, мазки шума, мягкий микрорельеф.
+# -----------------------------------------------------------------------------
+def painted_material(ctx,name,dark,light,roughness=.8,metallic=0,emission=0,alpha=1):
+    mat=bpy.data.materials.new(PREFIX+name);mat.use_nodes=True
+    mat.diffuse_color=(*srgb(light),alpha)
+    nodes=mat.node_tree.nodes;links=mat.node_tree.links;nodes.clear()
+    output=nodes.new("ShaderNodeOutputMaterial");shader=nodes.new("ShaderNodeBsdfPrincipled")
+    shader.location=(520,80);output.location=(800,80)
+    links.new(shader.outputs["BSDF"],output.inputs["Surface"])
+    coords=nodes.new("ShaderNodeTexCoord");coords.location=(-850,150)
+    noise=nodes.new("ShaderNodeTexNoise");noise.inputs["Scale"].default_value=2.8;noise.inputs["Detail"].default_value=2.5;noise.inputs["Roughness"].default_value=.7;noise.location=(-630,150)
+    links.new(coords.outputs["Generated"],noise.inputs["Vector"])
+    ramp=nodes.new("ShaderNodeValToRGB");ramp.location=(-370,180);ramp.color_ramp.elements[0].position=.17;ramp.color_ramp.elements[0].color=(*srgb(dark),1);ramp.color_ramp.elements[1].position=.82;ramp.color_ramp.elements[1].color=(*srgb(light),1)
+    links.new(noise.outputs["Fac"],ramp.inputs["Fac"]);links.new(ramp.outputs["Color"],shader.inputs["Base Color"])
+    set_input(shader,"Roughness",roughness);set_input(shader,"Metallic",metallic);set_input(shader,"Alpha",alpha)
+    if emission:
+        links.new(ramp.outputs["Color"],shader.inputs.get("Emission Color") or shader.inputs["Emission"])
+        set_input(shader,"Emission Strength",emission)
+    if name not in {"BlueCrystal","RedCrystal","Amethyst","SunGlow","BlueEnergy","GoldEnergy"}:
+        bump=nodes.new("ShaderNodeBump");bump.inputs["Strength"].default_value=.16;bump.inputs["Distance"].default_value=.065;links.new(noise.outputs["Fac"],bump.inputs["Height"]);links.new(bump.outputs["Normal"],shader.inputs["Normal"])
+    if alpha<1:
+        if hasattr(mat,"surface_render_method"):mat.surface_render_method="DITHERED"
+        elif hasattr(mat,"blend_method"):mat.blend_method="BLEND"
+    ctx.materials[name]=mat
+    return mat
+
+
+def water_material(ctx,name,dark,light,outer=False):
+    mat=painted_material(ctx,name,dark,light,.17,.12,.20 if outer else .16)
+    nodes=mat.node_tree.nodes;links=mat.node_tree.links;shader=next(n for n in nodes if n.type=="BSDF_PRINCIPLED")
+    tex=nodes.new("ShaderNodeTexCoord");mapping=nodes.new("ShaderNodeMapping");mapping.name="Animated water flow"
+    links.new(tex.outputs["UV"],mapping.inputs["Vector"])
+    driver=mapping.inputs["Location"].driver_add("default_value",1).driver;driver.expression="-frame/95.0"
+    noise=next(n for n in nodes if n.type=="TEX_NOISE");links.new(mapping.outputs["Vector"],noise.inputs["Vector"]);noise.inputs["Scale"].default_value=4.5
+    wave=nodes.new("ShaderNodeTexWave");wave.wave_type="BANDS";wave.bands_direction="X";wave.inputs["Scale"].default_value=5;wave.inputs["Distortion"].default_value=4.8;wave.inputs["Detail"].default_value=2.5;links.new(mapping.outputs["Vector"],wave.inputs["Vector"])
+    bump=next((n for n in nodes if n.type=="BUMP"),None)
+    if bump:links.new(wave.outputs["Color"],bump.inputs["Height"]);bump.inputs["Distance"].default_value=.055;bump.inputs["Strength"].default_value=.28
+    set_input(shader,"Coat Weight",.45,"Clearcoat");set_input(shader,"Coat Roughness",.12,"Clearcoat Roughness")
+    return mat
+
+
+def create_materials(ctx):
+    specs={
+        "Grass":("397936","88B950",.92,0,0), "Moss":("387F3D","A1C75A",.9,0,0),
+        "Earth":("665039","B18B5D",.98,0,0), "EarthEdge":("5B4939","957449",.93,0,0),
+        "Lane":("B6A185","E6D5B7",.76,0,0), "LaneLight":("C3AF93","EDDFC6",.75,0,0),
+        "LaneWarm":("A9967E","D6C0A5",.78,0,0), "LaneJoint":("655E50","9B8D70",.95,0,0),
+        "Stone":("6B8077","BDCAAA",.85,0,0), "Marble":("C1C8B4","FFF3D6",.58,.06,0),
+        "StoneDark":("212336","534454",.73,.15,0), "Obsidian":("161625","3C2A4F",.29,.38,0),
+        "Gold":("9C6A25","FFD371",.38,.72,0), "Bronze":("583E31","BD8651",.47,.65,0),
+        "Wood":("3D3025","997348",.92,0,0),
+        "PineDark":("143D31","296A43",.94,0,0), "Pine":("246C3F","4C9250",.9,0,0),
+        "PineLight":("468644","87B65B",.87,0,0), "Bush":("4B8D2E","B8D94C",.89,0,0),
+        "BushTip":("85AD35","E0EA72",.84,0,0),
+        "BlueCrystal":("086AAB","39CFFF",.20,.16,2.5),
+        "RedCrystal":("A7092D","FF3C55",.20,.15,1.45),
+        "Amethyst":("5723A5","C15AFF",.22,.22,1.9),
+        "SunGlow":("D99020","FFF0AC",.22,.15,2.0),
+        "GoldEnergy":("DFAD35","FFF3B2",.24,.05,2.2),
+        "BlueEnergy":("287FCA","9BEDFF",.15,.05,1.7),
+        "Foam":("79D3DB","DBFFF2",.33,0,.4), "Ink":("182C30","2F4642",.9,0,0),
+        "Wolf":("88A0B1","E2E7E1",.88,0,0), "Fur":("5E3926","A87948",.92,0,0),
+        "FurDark":("342A27","6A4933",.94,0,0), "Ivory":("C2BFA5","FFF0D1",.56,.05,0),
+        "PurpleHide":("382043","9461A9",.63,.05,0), "BlueHide":("365873","79B4CC",.72,.05,0),
+        "LavaRock":("3E303C","89715B",.87,.05,0), "Lava":("DD3A12","FFB638",.4,0,1.8),
+        "Spirit":("2E7881","97EDBC",.7,.05,.3), "Petal":("704E96","CE9BCE",.76,0,0),
+    }
+    for name,(dark,light,rough,metal,emission) in specs.items():painted_material(ctx,name,dark,light,rough,metal,emission,.46 if name=="BlueEnergy" else 1)
+    water_material(ctx,"RiverWater","057C89","24B7B1")
+    water_material(ctx,"SkyWater","228FBD","78D9F1",True)
+
+# -----------------------------------------------------------------------------
+# 3. Террейн, дорожки, река, арочные мосты, водопады.
+# -----------------------------------------------------------------------------
+def create_terrain(ctx):
+    ctx.group("Terrain");n=ctx.cfg.terrain_cells;vertices=[];faces=[]
+    for j in range(n+1):
+        y=-100+200*j/n
+        for i in range(n+1):
+            x=-100+200*i/n;vertices.append((x,y,ctx.height(x,y)))
+    for j in range(n):
+        for i in range(n):
+            k=j*(n+1)+i;faces.append((k,k+1,k+n+2,k+n+1))
+    ground=ctx.mesh("PlayableTerrain_200x200",vertices,faces,"Grass",smooth_faces=True)
+    ground["category"]="playable_terrain";ground["width"]=200;ground["height"]=200
+    # Вертикальная толща острова — отдельный меш, не растягивает игровую землю.
+    for side in range(4):
+        verts=[];fs=[]
+        for i in range(n+1):
+            t=-100+200*i/n;x,y=(t,-100) if side==0 else (100,t) if side==1 else (-t,100) if side==2 else (-100,-t)
+            verts.extend([(x,y,ctx.height(x,y)),(x,y,-20)])
+            if i:fs.append((2*i-2,2*i-1,2*i+1,2*i))
+        ctx.mesh("Layered cliff earth side",verts,fs,"Stone")
+    ctx.group("Backdrop")
+    ctx.mesh("Outer blue lake",[(-145,-145,-22),(145,-145,-22),(145,145,-22),(-145,145,-22)],[(0,1,2,3)],"SkyWater",uv=[(0,0),(14,0),(14,14),(0,14)])
+
+
+def add_prism(vertices,faces,quad,bottom,top):
+    k=len(vertices);vertices.extend([(x,y,bottom) for x,y in quad]+[(x,y,top) for x,y in quad])
+    faces.extend([(k+3,k+2,k+1,k),(k+4,k+5,k+6,k+7),
+                  (k,k+1,k+5,k+4),(k+1,k+2,k+6,k+5),(k+2,k+3,k+7,k+6),(k+3,k,k+4,k+7)])
+
+
+def create_path(ctx,points,width,material="Earth",name="Woodland trail"):
+    points=path_samples(points,1.3);verts=[];faces=[]
+    # Разные тропы могут пересекаться: миллиметровый сдвиг убирает coplanar faces.
+    surface_z=.065+ctx.path_layer*.002;ctx.path_layer+=1
+    for i,p in enumerate(points):
+        a=points[max(0,i-1)];b=points[min(i+1,len(points)-1)];d=Vector(b)-Vector(a);d.normalize();n=Vector((-d.y,d.x))
+        for side in [-1,1]:verts.append((p[0]+n.x*width*.5*side,p[1]+n.y*width*.5*side,surface_z))
+        if i:
+            q=len(verts)-4;mid=((points[i-1][0]+p[0])*.5,(points[i-1][1]+p[1])*.5)
+            if route_distance(mid,ctx.river)>ctx.cfg.river_half_width+.15:faces.append((q,q+2,q+3,q+1))
+    return ctx.mesh(name,verts,faces,material)
+
+
+def create_lane(ctx,name,points):
+    ctx.group("Roads");w=ctx.cfg.road_width;sample=path_samples(points,1.75)
+    create_path(ctx,points,w+.5,"LaneJoint",name+" road foundation")
+    groups=[([],[]) for _ in range(3)];columns=6
+    layer_z={"Top":0,"Mid":.009,"Bot":.018}[name]
+    for row,(a,b) in enumerate(zip(sample,sample[1:])):
+        d=Vector(b)-Vector(a);d.normalize();middle=(Vector(a)+Vector(b))*.5
+        ta=(Vector(b)-Vector(sample[max(0,row-1)])).normalized();tb=(Vector(sample[min(len(sample)-1,row+2)])-Vector(a)).normalized()
+        na=Vector((-ta.y,ta.x));nb=Vector((-tb.y,tb.x))
+        if route_distance(middle,ctx.river)<ctx.cfg.river_half_width+.65:continue
+        for col in range(columns):
+            lo=-w/2+col*w/columns;hi=lo+w/columns
+            q=[Vector(a)+na*lo,Vector(b)+nb*lo,Vector(b)+nb*hi,Vector(a)+na*hi]
+            c=sum(q,Vector((0,0)))/4;q=[tuple(c+(p-c)*.956) for p in q]
+            index=(col+int(middle.x*7+middle.y*3))%3;vs,fs=groups[index];add_prism(vs,fs,q,.08+layer_z,.30+layer_z)
+        # Отдельные инкрустированные сегменты светящейся золотой оси.
+        ctx.curve(name+" divine center inlay",[(a[0],a[1],.324+layer_z),(b[0],b[1],.324+layer_z)],.075,"SunGlow")
+    for mat,(vertices,faces) in zip(["Lane","LaneLight","LaneWarm"],groups):
+        if vertices:ctx.mesh(name+" individually bevelled pavers",vertices,faces,mat,bevel=.035)
+
+
+def create_river(ctx):
+    ctx.group("River");points=path_samples(ctx.river,1.0);vertices=[];uv=[];faces=[];travel=0
+    for i,p in enumerate(points):
+        a=points[max(0,i-1)];b=points[min(i+1,len(points)-1)];d=(Vector(b)-Vector(a)).normalized();normal=Vector((-d.y,d.x))
+        if i:travel+=math.dist(points[i-1],p)
+        for j in range(5):
+            t=j/4;s=(t-.5)*2;vertices.append((p[0]+normal.x*s*ctx.cfg.river_half_width,p[1]+normal.y*s*ctx.cfg.river_half_width,-.74-abs(s)*.04));uv.append((t,travel*.065))
+        if i:
+            for j in range(4):k=(i-1)*5+j;faces.append((k,k+5,k+6,k+1))
+    water=ctx.mesh("Turquoise diagonal living river",vertices,faces,"RiverWater",uv=uv,smooth_faces=True);water["category"]="river"
+    # Пенистые полоски следуют руслу по настоящим ключам, а не одной линейной оси.
+    length=route_length(points)
+    for i in range(58):
+        x=math.sin(i*2.39)*2.8;shape=[(x+.07*math.sin(j*1.5),-.45+j*.18,0) for j in range(6)]
+        obj=ctx.curve("Animated river foam",shape,.028,"Foam")
+        for frame in range(1,ctx.cfg.frames+2,12):
+            s=(length*i/58+(frame-1)*.075)%length;p=route_sample(points,s);q=route_sample(points,min(length,s+.3));obj.location=(p[0],p[1],-.69);obj.rotation_euler.z=-math.atan2(q[0]-p[0],q[1]-p[1]);obj.keyframe_insert("location",frame=frame);obj.keyframe_insert("rotation_euler",frame=frame)
+        for curve in action_curves(obj):
+            for key in curve.keyframe_points:key.interpolation="LINEAR"
+            curve.modifiers.new("CYCLES")
+
+
+def create_bridge(ctx,name,position,energy=None):
+    ctx.group("Bridges");width=3.1 if energy else 9.4;span=18.5
+    with ctx.root(name,(position[0],position[1],0),"energy_bridge" if energy else "stone_bridge",rotation=-PI/4) as root:
+        root["bridge_kind"]=energy or "stone";root["passage_width"]=width
+        def z(y):return .24+(1.5 if not energy else .65)*max(0,1-(y/(span/2))**2)
+        if energy:
+            glow="GoldEnergy" if energy=="gold" else "BlueEnergy";frame_mat="Gold" if energy=="gold" else "Marble"
+            for i in range(29):
+                y=-span/2+(i+.5)*span/29
+                obj=ctx.box("Energy bridge translucent segment",(0,y,z(y)),(width,span/29*.93,.11),glow,.035)
+                driver=obj.driver_add("location",2).driver;driver.expression=f"{z(y):.5f}+.035*sin(frame*.065+{i*.28})"
+            for side in [-1,1]:ctx.curve("Energy luminous guide rail",[(side*(width/2+.06),-span/2+i*span/32,z(-span/2+i*span/32)+.18) for i in range(33)],.045,glow)
+        else:
+            frame_mat="Marble";vs=[];fs=[]
+            for row in range(25):
+                a=-span/2+row*span/25;b=-span/2+(row+1)*span/25
+                for col in range(6):
+                    x=-width/2+(col+.5)*width/6;quad=[(x-width/12+.035,a+.025),(x+width/12-.035,a+.025),(x+width/12-.035,b-.025),(x-width/12+.035,b-.025)]
+                    k=len(vs)
+                    vs.extend([(qx,qy,z(qy)-.28) for qx,qy in quad]+[(qx,qy,z(qy)) for qx,qy in quad]);fs.extend([(k+3,k+2,k+1,k),(k+4,k+5,k+6,k+7),(k,k+1,k+5,k+4),(k+1,k+2,k+6,k+5),(k+2,k+3,k+7,k+6),(k+3,k,k+4,k+7)])
+            ctx.mesh("Stone arch bridge bevelled deck",vs,fs,"LaneLight",bevel=.04)
+            for side in [-1,1]:
+                curve=[(side*(width/2+.1),-span/2+i*span/40,z(-span/2+i*span/40)-.42) for i in range(41)]
+                ctx.curve("Stone structural arch rib",curve,.38,"Stone")
+                ctx.curve("Golden bridge handrail",[(x,y,zz+1.55) for x,y,zz in curve],.085,"Gold")
+                for j in range(9):
+                    y=-span/2+j*span/8;ctx.box("Bridge parapet carved post",(side*(width/2+.1),y,z(y)+.44),(.32,.38,.90),"Marble",.055)
+            ctx.curve("Bridge divine center line",[(0,-span/2+i*span/40,z(-span/2+i*span/40)+.025) for i in range(41)],.07,"SunGlow")
+        for side in [-1,1]:
+            for end in [-1,1]:
+                x=side*(width/2+.18);y=end*span/2
+                ctx.cylinder("Bridge bank pedestal",(x,y,.34),.50,.80,frame_mat,12)
+                ctx.crystal("Bridge gate lantern",(x,y,.85),.19,.8,"SunGlow" if energy!="blue" else "BlueCrystal")
+        return root
+
+
+def create_waterfall(ctx,name,points,width=5.0):
+    ctx.group("Waterfalls");path=catmull(points,7);verts=[];uv=[];faces=[];travel=0
+    for i,p in enumerate(path):
+        a=path[max(0,i-1)];b=path[min(i+1,len(path)-1)];dx,dy=b[0]-a[0],b[1]-a[1];l=math.hypot(dx,dy) or 1;nx,ny=-dy/l,dx/l
+        if i:travel+=math.dist(path[i-1],p)
+        for j in range(5):t=j/4;verts.append((p[0]+nx*(t-.5)*width,p[1]+ny*(t-.5)*width,p[2]+.05*math.sin(i*1.2+j)));uv.append((t,travel*.1))
+        if i:
+            for j in range(4):k=(i-1)*5+j;faces.append((k,k+5,k+6,k+1))
+    obj=ctx.mesh(name,verts,faces,"SkyWater",uv=uv,smooth_faces=True);obj["category"]="waterfall"
+    for offset in [-.34,.28]:ctx.curve("Cascade bright falling lace",[(p[0]+offset*width,p[1]-.045,p[2]+.07) for p in path],.048,"Foam")
+    end=points[-1]
+    for j in range(4):
+        ring=ctx.ring("Animated waterfall bubbling ring",(end[0],end[1],end[2]+.08+j*.018),1.6+j*.4,.038,"Foam")
+        for axis in range(3):ring.driver_add("scale",axis).driver.expression=f".35+((frame+{j*13})%58)/58.0"
+    for j in range(14):
+        drop=ctx.sphere("Animated waterfall spray",(end[0],end[1],end[2]+.3),(.11,.12,.30),"Foam",1);phase=j*7
+        drop.driver_add("location",0).driver.expression=f"{end[0]:.4f}+{math.sin(j*2.4)*2.5:.4f}*((frame+{phase})%36)/36.0"
+        drop.driver_add("location",1).driver.expression=f"{end[1]:.4f}+{math.cos(j*2.4)*2:.4f}*((frame+{phase})%36)/36.0"
+        drop.driver_add("location",2).driver.expression=f"{end[2]+.2:.4f}+3.2*sin(pi*((frame+{phase})%36)/36.0)"
+
+
+def create_rock(ctx,name,p,scale=(2,2,3),material="Stone",seed=0):
+    rings=[]
+    for i,(z,r) in enumerate([(-.5,.72),(-.3,1),(.12,.92),(.19,.78),(.61,.76),(.72,.48)]):
+        rings.append((math.sin(seed+i)*.12*scale[0],math.cos(seed+i)*.1*scale[1],z*scale[2],r*scale[0],r*scale[1]))
+    obj=ctx.loft(name,rings,material,8,bevel=.08);obj.location=p;obj.rotation_euler.z=seed*.71
+    return obj
+
+
+def create_cliffs_and_waterfalls(ctx):
+    ctx.group("Backdrop")
+    # Просветы в скалах оставляют полосу воды видимой по всей длине водопада.
+    flows=[("WestUpper",[(-99,49,-.4),(-104,48,-1.6),(-110,45,-13),(-116,43,-21.8)]),
+           ("WestLower",[(-99,-35,-.4),(-105,-36,-2),(-110,-39,-14),(-116,-41,-21.8)]),
+           ("SouthWest",[(-30,-99,-.4),(-31,-105,-1.8),(-33,-112,-13),(-35,-118,-21.8)]),
+           ("SouthEast",[(40,-99,-.4),(42,-106,-2),(45,-112,-14),(47,-118,-21.8)]),
+           ("EastLower",[(99,-49,-.4),(105,-50,-1.8),(111,-52,-13),(118,-53,-21.8)]),
+           ("EastUpper",[(99,44,-.4),(105,45,-1.7),(111,47,-14),(118,49,-21.8)])]
+    starts=[p[0][:2] for _,p in flows]
+    for side in range(4):
+        for j in range(35):
+            t=-100+j*200/34;x,y=(t,-101) if side==0 else (101,t) if side==1 else (t,101) if side==2 else (-101,t)
+            if any(math.dist((x,y),p)<5.6 for p in starts):continue
+            create_rock(ctx,"Soft eroded layered edge cliff",(x,y,-6),(4.0,4.0,12.0+j%3),seed=j+side*31)
+    for name,points in flows:create_waterfall(ctx,name,points)
+
+# -----------------------------------------------------------------------------
+# 4. Сосны, кусты, руины, расчищенные поляны и затворы коротких проходов.
+# -----------------------------------------------------------------------------
+def create_tree(ctx,position,height=9.0,variant=0):
+    key=("pine",variant%5)
+    if key not in ctx.cache:
+        verts=[];faces=[];indices=[];n=20
+        for tier in range(6):
+            z=1.8+tier*1.09;r=3.0-tier*.39;phase=tier*.34+variant*.21;start=len(verts)
+            for dz,rr in [(0,.81),(.15,1),(.67,.65),(1.55,.28),(2.35,.012)]:
+                for j in range(n):
+                    angle=j*2*PI/n+phase;radius=r*rr*(1 if j%2==0 else .66)*(1+.07*math.sin(j*3+variant))
+                    verts.append((math.cos(angle)*radius,math.sin(angle)*radius,z+dz+.08*math.sin(j*2.1)))
+            faces.append(tuple(start+j for j in reversed(range(n))));indices.append(0)
+            for row in range(4):
+                for j in range(n):
+                    faces.append((start+row*n+j,start+row*n+(j+1)%n,start+(row+1)*n+(j+1)%n,start+(row+1)*n+j));indices.append(1 if j%4==0 else 2 if row<2 else 3)
+        start=len(verts)
+        for z,r in [(0,.27),(1.4,.22),(6.9,.11)]:
+            verts.extend((math.cos(j*2*PI/10)*r,math.sin(j*2*PI/10)*r,z) for j in range(10))
+        for row in range(2):
+            for j in range(10):faces.append((start+row*10+j,start+row*10+(j+1)%10,start+(row+1)*10+(j+1)%10,start+(row+1)*10+j));indices.append(0)
+        proto=ctx.mesh("Lush pine prototype",verts,faces,["Wood","PineDark","Pine","PineLight"],indices)
+        ctx.cache[key]=proto.data;bpy.data.objects.remove(proto,do_unlink=True)
+    obj=ctx.object("Forest pine",ctx.cache[key],position,(height/9,height/9,height/9),rotation=(0,0,variant*.71))
+    obj["category"]="tree";obj["trunk_radius"]=height*.03
+    obj.driver_add("rotation_euler",1).driver.expression=f".007*sin(frame*.027+{variant*.57})"
+    return obj
+
+
+def create_bush(ctx,position,scale=1.0,variant=0):
+    key=("bush",variant%4)
+    if key not in ctx.cache:
+        rng=random.Random(510+variant%4);verts=[];faces=[];indices=[]
+        for j in range(30):
+            a=j*2.39996;r=rng.uniform(.1,1.0);h=rng.uniform(.75,1.5);start=len(verts)
+            # Объёмная складка листа: центральный гребень и отогнутый кончик.
+            pts=[(-.02,0,0),(-.27,.40,h*.37),(-.19,.81,h*.77),(0,1.12,h),(.19,.81,h*.77),(.27,.40,h*.37),(0,.56,h*.63)]
+            for x,y,z in pts:
+                y=y*.7+r;verts.append((math.cos(a)*y-math.sin(a)*x,math.sin(a)*y+math.cos(a)*x,z))
+            for face in [(0,1,6),(1,2,6),(2,3,6),(3,4,6),(4,5,6),(5,0,6)]:faces.append(tuple(start+i for i in face));indices.append(1 if j%3==0 else 0)
+        proto=ctx.mesh("Folded lime foliage prototype",verts,faces,["Bush","BushTip"],indices)
+        ctx.cache[key]=proto.data;bpy.data.objects.remove(proto,do_unlink=True)
+    obj=ctx.object("Bright ambush bush",ctx.cache[key],position,(scale,scale,scale),rotation=(0,0,variant*.47));obj["category"]="bush";obj["concealment_zone"]=True
+    return obj
+
+
+def create_wall(ctx,name,position,length=5.5,angle=0,broken=False):
+    with ctx.root(name,position,"ruin",angle) as root:
+        blocks=max(2,round(length/1.15));length=blocks*1.15
+        for row in range(3):
+            for i in range(blocks):
+                if broken and row==2 and i>blocks//2:continue
+                x=(i-(blocks-1)/2)*1.15+(row%2)*.10
+                ctx.box("Ruin softly chamfered masonry",(x,0,.32+row*.58),(1.10,.86,.54),"Stone",.075)
+        for side in [-1,1]:
+            x=side*(length/2+.17);ctx.box("Ancient squared terminal pier",(x,0,1.05),(.87,1.10,2.10),"Marble",.10);ctx.box("Golden pier coping",(x,0,2.13),(1.02,1.23,.22),"LaneLight",.05)
+        ctx.box("Carved ruin coping",(0,0,1.83),(length+.3,1.01,.22),"LaneLight",.06)
+        for j in range(3):ctx.sphere("Moss growing on old stone",(-length*.28+j*length*.24,-.43,1.69),(.36,.13,.16),"Moss",1)
+        return root
+
+
+def create_ruin_arch(ctx,position,angle=0):
+    with ctx.root("Antique arch",position,"ruin",angle):
+        for side in [-1,1]:
+            ctx.cylinder("Ruined fluted column",(side*2.1,0,2.0),.46,4,"Marble",12)
+            ctx.box("Classical column capital",(side*2.1,0,4.04),(1.19,1.10,.36),"LaneLight",.07)
+            for j in range(8):
+                a=j*PI/4;ctx.limb("Column carved flute",(side*2.1+.45*math.cos(a),.45*math.sin(a),.5),(side*2.1+.45*math.cos(a),.45*math.sin(a),3.75),.037,.037,"LaneLight",6)
+        for j in range(15):
+            a=(j+.5)*PI/15
+            ctx.box("Bevelled ancient arch voussoir",(math.cos(a)*2.1,0,4.0+math.sin(a)*2.1),(.48,1.0,.57),"Marble",.065)
+
+
+def create_clearing(ctx,name,position):
+    ctx.group("Clearings")
+    with ctx.root("Clearing "+name,(*position,0),"clearing") as root:
+        root["radius"]=10.5
+        ctx.cylinder("Cleared warm earth",(0,0,.035),10.6,.08,"Earth",64,.015)
+        for j in range(18):
+            a=j*2*PI/18;ctx.sphere("Clearing boundary pebble",(10.8*math.cos(a),10.8*math.sin(a),.16),(.35,.25,.16),"Stone",1)
+        ctx.text("Clearing name",name.upper(),(0,-.6,.087),1.7)
+
+
+def create_forest(ctx):
+    ctx.group("Ruins");ruins=[]
+    for ci,center in enumerate(CLEARINGS.values()):
+        for j in range(8):
+            a=j*PI/4+.19;position=(center[0]+14.2*math.cos(a),center[1]+14.2*math.sin(a))
+            if not ctx.clear_for_foliage(position,.1):continue
+            create_wall(ctx,"Forest clearing wall",(*position,ctx.height(*position)),4.4,a+PI/2,(j+ci)%2==0);ruins.append(position)
+    for p,angle in [((-88,24),0),((-9,88),0),((91,10),PI/2),((12,-87),0)]:
+        create_ruin_arch(ctx,(*p,ctx.height(*p)),angle)
+    ctx.group("Forest");positions=[];attempts=0
+    while len(positions)<ctx.cfg.tree_count and attempts<35000:
+        attempts+=1;p=(ctx.rng.uniform(-94,94),ctx.rng.uniform(-94,94))
+        if not ctx.clear_for_foliage(p,1.0):continue
+        if any(math.dist(p,q)<4.0 for q in positions) or any(math.dist(p,q)<4.7 for q in ruins):continue
+        positions.append(p);height=ctx.rng.uniform(7.2,10.4);create_tree(ctx,(*p,ctx.height(*p)),height,len(positions)%23)
+    # Кусты вдоль границ полян и троп, а не случайно в центре дороги.
+    bushes=[]
+    for i in range(3500):
+        if len(bushes)>=ctx.cfg.bush_count:break
+        if i<120:
+            center=list(CLEARINGS.values())[i%4];a=i*2.39996;p=(center[0]+ctx.rng.uniform(11.5,14)*math.cos(a),center[1]+ctx.rng.uniform(11.5,14)*math.sin(a))
+        else:p=(ctx.rng.uniform(-91,91),ctx.rng.uniform(-91,91))
+        if min(route_distance(p,r) for r in ctx.lanes.values())<6.2 or route_distance(p,ctx.river)<5.3:continue
+        if any(math.dist(p,c)<10.6 for c in CLEARINGS.values()):continue
+        if any(math.dist(p,c)<15.7 for c in list(BASES.values())+list(BOSSES.values())):continue
+        if any(math.dist(p,c)<4.1 for _,_,c in CAMPS):continue
+        if any(math.dist(p,c)<2.4 for c,_ in CRYSTAL_GATES):continue
+        if any(math.dist(p,q)<3.3 for q in bushes):continue
+        bushes.append(p);create_bush(ctx,(*p,ctx.height(*p)),ctx.rng.uniform(.9,1.45),len(bushes)%17)
+    ctx.registry["trees"]=positions;ctx.registry["bushes"]=bushes
+    print(f"FOREST: {len(positions)} trees, {len(bushes)} bushes",flush=True)
+
+
+def create_crystal_gate(ctx,index,position,toward):
+    ctx.group("CrystalGates");direction=(Vector(toward)-Vector(position)).normalized();angle=-math.atan2(direction.x,direction.y)
+    with ctx.root(f"CrystalGate {index:02d}",(*position,.10),"crystal_gate",angle) as root:
+        root["gate_index"]=index;root["durability"]=24.0;root["respawn_seconds"]=60.0
+        root["blocks_shortcut"]=True
+        for j,(x,y,z,r,h) in enumerate([(0,0,0,.86,4.6),(-1.0,.10,0,.48,2.9),(.98,.10,0,.54,3.3),(-.40,-.65,0,.36,2.2),(.5,.55,0,.40,2.4)]):
+            obj=ctx.crystal("Destructible amethyst shard",(x,y,z),r,h,"Amethyst",(0,(j-2)*.13,j*.28));obj["rest_location"]=list(obj.location);obj["rest_rotation"]=list(obj.rotation_euler);obj["rest_scale"]=list(obj.scale)
+        for side in [-1,1]:
+            # Стенки обрамляют затвор; сами кристаллы закрывают середину.
+            for j in range(2):ctx.box("Crystal narrow passage sidewall",(side*(2.9+j*1.07),0,.55),(1.02,1.4,1.1),"Stone",.10)
+            ctx.crystal("Passage flank quartz",(side*3.85,0,1.1),.18,.8,"Amethyst")
+        ctx.registry[f"crystal_{index}"]=root
+        return root
+
+
+def damage_crystal(root,amount=4.0,frame=None):
+    """Blender-превью разрушения. root — Empty с category='crystal_gate'.
+    Игровой контроллер должен отдельно применять коллизии и таймер возрождения.
+    """
+    if root.get("category")!="crystal_gate":raise ValueError("Expected a crystal gate root")
+    if not math.isfinite(amount):raise ValueError("Damage must be finite")
+    if amount<=0:return
+    previous=float(root.get("durability",24));root["durability"]=max(0,previous-amount)
+    if previous<=0 or root["durability"]>0:return
+    start=bpy.context.scene.frame_current if frame is None else frame
+    for i,obj in enumerate(root.children):
+        if "rest_location" not in obj:continue
+        obj.location=obj["rest_location"];obj.scale=obj["rest_scale"];obj.rotation_euler=obj["rest_rotation"]
+        for path in ["location","scale","rotation_euler"]:obj.keyframe_insert(path,frame=start)
+        a=i*2.39996;obj.location+=Vector((math.cos(a)*3,math.sin(a)*3,1.8));obj.rotation_euler.x+=.7;obj.keyframe_insert("location",frame=start+10);obj.keyframe_insert("rotation_euler",frame=start+10)
+        obj.location.z-=2;obj.scale=(.001,.001,.001);obj.keyframe_insert("location",frame=start+23);obj.keyframe_insert("scale",frame=start+23)
+
+
+def restore_crystal(root,frame=None):
+    """Анимация появления того же затвора, без пересоздания модели."""
+    if root.get("category")!="crystal_gate":raise ValueError("Expected a crystal gate root")
+    start=bpy.context.scene.frame_current if frame is None else frame
+    root["durability"]=24.0
+    for obj in root.children:
+        if "rest_location" not in obj:continue
+        obj.animation_data_clear();obj.location=obj["rest_location"];obj.rotation_euler=obj["rest_rotation"];obj.scale=(.001,.001,.001);obj.keyframe_insert("scale",frame=start);obj.scale=obj["rest_scale"];obj.keyframe_insert("scale",frame=start+20)
+
+# -----------------------------------------------------------------------------
+# 5. Башни, Нексусы и арены. Каждая функция строит независимую модель.
+# -----------------------------------------------------------------------------
+def create_tower(ctx,team,tier,position,lane="Mid"):
+    ctx.group("Towers");light=team=="Light";stone="Marble" if light else "StoneDark";metal="Gold" if light else "Bronze";glow="BlueCrystal" if light else "RedCrystal"
+    with ctx.root(f"Tower {team} {lane} T{tier}",(*position,.32),"tower") as root:
+        root["team"]=team;root["tier"]=tier;root["lane"]=lane;root["health"]={1:3600,2:4400,3:5400}[tier]
+        ctx.loft("Tower bevelled stepped foundation",[(0,0,0,2.55,2.55),(0,0,.28,2.55,2.55),(0,0,.43,2.20,2.20),(0,0,.75,2.20,2.20),(0,0,.85,1.72,1.72)],stone,24,.075)
+        ctx.loft("Tower tapered fluted shaft",[(0,0,.78,1.53,1.53),(0,0,1.1,1.43,1.43),(0,0,3.35,1.12,1.12),(0,0,3.75,1.48,1.48),(0,0,4.0,1.58,1.58)],stone,16,.06)
+        for z,r in [(.3,2.43),(.85,1.84),(1.12,1.45),(3.65,1.43),(4.04,1.58)]:ctx.ring("Tower chased metallic band",(0,0,z),r,.055,metal)
+        for j in range(8):
+            a=j*PI/4;x,y=math.cos(a),math.sin(a)
+            ctx.limb("Tower carved stone flute",(x*1.42,y*1.42,1.18),(x*1.17,y*1.17,3.30),.075,.06,"LaneLight" if light else "Bronze",8)
+            ctx.crystal("Tower inset luminous rune",(x*1.30,y*1.30,2.0),.075,.56,glow)
+        with ctx.root("Tower floating focus",(0,0,4.0)) as focus:
+            ctx.crystal("Tower floating main crystal",(0,0,.15),.69,3.15,glow)
+            for j in range(3):
+                a=j*2*PI/3;x,y=math.cos(a),math.sin(a)
+                ctx.crystal("Tower orbiting splinter",(x*1.02,y*1.02,.38),.22,1.35,glow,(.12*y,-.12*x,0))
+            focus.driver_add("location",2).driver.expression="4.0+.16*sin(frame*.055)"
+            focus.driver_add("rotation_euler",2).driver.expression="frame*.006"
+        for j in range(3):
+            a=j*2*PI/3;x,y=math.cos(a),math.sin(a)
+            ctx.curve("Tower sweeping crystal cradle",[(x*1.65,y*1.65,3.60),(x*1.77,y*1.77,4.45),(x*1.29,y*1.29,5.40),(x*.93,y*.93,5.88)],.115,metal)
+        ctx.ring("Tower spell focusing halo",(0,0,5.1),1.24,.035,glow)
+        ctx.text("Tower tier label",f"T{tier}",(0,-2.0,.045),1.0)
+        return root
+
+
+def create_nexus(ctx,team,position):
+    ctx.group("Bases");light=team=="Light";stone="Marble" if light else "StoneDark";metal="Gold" if light else "Bronze";glow="BlueCrystal" if light else "RedCrystal"
+    with ctx.root("Nexus "+team,(*position,.12),"nexus") as root:
+        root["team"]=team
+        ctx.cylinder("Nexus plaza round foundation",(0,0,.1),14.1,.35,stone,64,.08)
+        # Мраморные ступени и неглубокая чаша фонтана.
+        ctx.loft("Royal fountain stepped bowl",[(0,0,.28,7.8,7.8),(0,0,.60,7.8,7.8),(0,0,.8,7.1,7.1),(0,0,1.2,6.7,6.7)],stone,48,.08)
+        ctx.cylinder("Nexus turquoise fountain water" if light else "Crimson arcane basin",(0,0,1.24),6.05,.045,"RiverWater" if light else "RedCrystal",64,.01)
+        for r in [7.2,10.4,13.55]:ctx.ring("Nexus plaza golden circuit",(0,0,.32 if r>8 else 1.23),r,.065,metal)
+        ctx.loft("Nexus inner crystal altar",[(0,0,1.2,2.6,2.6),(0,0,1.8,2.6,2.6),(0,0,2.2,1.9,1.9)],stone,16,.08)
+        with ctx.root("Nexus hovering energy",(0,0,2.45)) as focus:
+            ctx.crystal("Nexus tall radiant crystal",(0,0,0),1.45,10.2,glow)
+            focus.driver_add("location",2).driver.expression="2.45+.20*sin(frame*.035)";focus.driver_add("rotation_euler",2).driver.expression="frame*.0035"
+        for j in range(8):
+            a=j*PI/4;x,y=math.cos(a),math.sin(a)
+            if light:
+                ctx.curve("Nexus golden rising arch",[(x*6.8,y*6.8,.8),(x*6.3,y*6.3,4.4),(x*4.5,y*4.5,7.5),(x*2.7,y*2.7,8.2)],.24,metal)
+                ctx.cylinder("Marble sanctuary pillar",(x*6.7,y*6.7,2.25),.68,3.4,stone,12)
+            else:
+                ctx.crystal("Citadel obsidian spire",(x*6.3,y*6.3,.6),.88,6.3+(j%3)*.6,"Obsidian",(y*.17,-x*.17,0))
+                ctx.crystal("Citadel burning ember",(x*5.4,y*5.4,3.5),.27,2.1,glow)
+            ctx.crystal("Nexus outer ward shard",(x*4.0,y*4.0,1.8),.40,3.2,glow)
+        if light:
+            for j in range(6):
+                a=j*PI/3
+                points=[(math.cos(a)*(3.8+t*2.0),math.sin(a)*(3.8+t*2.0),1.3+2.6*math.sin(t*PI)) for t in [i/18 for i in range(19)]]
+                ctx.curve("Fountain water arc",points,.055,"SkyWater")
+        return root
+
+
+def create_arena(ctx,name,position,dark=False):
+    ctx.group("Arenas");stone="StoneDark" if dark else "LaneLight";trim="Amethyst" if dark else "Gold"
+    with ctx.root(name,(*position,.12),"arena") as root:
+        ctx.cylinder("Arena raised circular foundation",(0,0,.12),15.6,.65,stone,64,.09)
+        verts=[];faces=[]
+        for row in range(5):
+            lo=1.3+row*2.8;hi=lo+2.74;n=20+row*12
+            for j in range(n):
+                a=j*2*PI/n+.008;b=(j+1)*2*PI/n-.008
+                quad=[(lo*math.cos(a),lo*math.sin(a)),(hi*math.cos(a),hi*math.sin(a)),(hi*math.cos(b),hi*math.sin(b)),(lo*math.cos(b),lo*math.sin(b))]
+                add_prism(verts,faces,quad,.42,.58)
+        ctx.mesh("Arena individual radial stone sectors",verts,faces,stone,bevel=.045)
+        for r in [3.5,7.4,11.1,14.8]:ctx.ring("Arena ornamental sun circuit",(0,0,.64),r,.035,trim)
+        for j in range(24):
+            a=j*2*PI/24
+            if j%6==0:continue
+            x,y=15.1*math.cos(a),15.1*math.sin(a)
+            ctx.box("Arena crenellated boundary",(x,y,1.0),(.9,1.6,1.7),stone,.11,a)
+            if j%2==0:
+                ctx.crystal("Arena perimeter crystal",(x,y,1.9),.28,1.7,"Amethyst" if dark else "SunGlow")
+        return root
+
+# -----------------------------------------------------------------------------
+# 6. Стилизованные фигуры монстров. Без внешних моделей, каждый вид — своя функция.
+# -----------------------------------------------------------------------------
+def create_wolf(ctx):
+    ctx.sphere("Wolf elongated ribcage",(0,.15,1.6),(.83,1.38,.80),"Wolf")
+    ctx.sphere("Wolf proud breast",(0,-.75,1.77),(.76,.76,.91),"Wolf")
+    ctx.sphere("Wolf angular head",(0,-1.42,2.36),(.58,.70,.53),"Wolf")
+    ctx.sphere("Wolf tapered muzzle",(0,-1.98,2.15),(.35,.56,.26),"Wolf")
+    ctx.sphere("Wolf wet nose",(0,-2.47,2.18),(.24,.14,.15),"Obsidian",1)
+    for side in [-1,1]:
+        for y in [-.77,1.02]:
+            ctx.limb("Wolf upper leg",(side*.52,y,1.4),(side*.64,y+.13,.66),.23,.16,"Wolf")
+            ctx.limb("Wolf lower leg",(side*.64,y+.13,.66),(side*.67,y-.02,.22),.14,.10,"Wolf")
+            ctx.sphere("Wolf paw",(side*.67,y-.14,.15),(.23,.35,.17),"Ivory",1)
+        ctx.crystal("Wolf sharply pricked ear",(side*.42,-1.26,2.7),.23,.83,"Wolf",(.10,side*.18,0))
+        ctx.sphere("Wolf crystal blue eye",(side*.44,-1.84,2.5),(.09,.11,.07),"BlueCrystal",1)
+        for j in range(5):
+            ctx.crystal("Wolf folded neck fur",(side*(.52+j*.025),-.99+j*.20,1.76),.16,.60,"Ivory",(.6,side*.7,0))
+    ctx.curve("Wolf expressive sweeping tail",[(0,1.2,1.7),(.15,2.0,1.8),(.40,2.55,1.45),(.55,2.85,1.12)],.23,"Wolf")
+
+
+def create_spider(ctx,giant=False):
+    body="PurpleHide" if giant else "BlueHide"
+    ctx.sphere("Spider broad abdomen",(0,.67,1.45),(1.02,1.40,.80),body)
+    ctx.sphere("Spider cephalothorax",(0,-.68,1.28),(.76,.77,.57),"Obsidian")
+    for side in [-1,1]:
+        for j in range(4):
+            y=-.98+j*.60;knee=(side*(2.0+math.sin(j)*.3),y+(j-1.5)*.36,1.7)
+            ctx.limb("Spider proximal articulated leg",(side*.60,y,1.35),knee,.15,.11,body)
+            ctx.limb("Spider tapering distal leg",knee,(side*(2.6+math.sin(j)*.22),y+(j-1.5)*.7,.08),.11,.015,"Obsidian")
+        ctx.curve("Spider ivory mandible",[(side*.26,-1.20,1.1),(side*.44,-1.7,.88),(side*.15,-1.75,.71)],.10,"Ivory")
+        for j in range(3):ctx.sphere("Spider luminous eye",(side*(.16+j*.18),-1.31+j*.10,1.57-j*.04),(.10,.075,.10),"RedCrystal",1)
+    for j in range(5):ctx.crystal("Spider dorsal amethyst marking",(0,.1+j*.34,2.12),.12,.23,"Amethyst")
+
+
+def create_elemental(ctx):
+    ctx.sphere("Elemental luminous heart",(0,0,1.7),(.68,.55,1.13),"BlueCrystal")
+    for j in range(9):
+        a=j*2.39996;r=1.05 if j%2 else .85;z=.55+(j%3)*.78
+        obj=ctx.sphere("Orbiting elemental stone",(math.cos(a)*r,math.sin(a)*r,z),(.41,.32,.52),"Stone",1)
+        obj.driver_add("location",2).driver.expression=f"{z:.3f}+.12*sin(frame*.05+{j})"
+    for side in [-1,1]:ctx.sphere("Elemental white eye",(side*.19,-.54,2.12),(.075,.06,.11),"SunGlow",1)
+    ctx.ring("Elemental levitation sigil",(0,0,.20),1.20,.025,"BlueCrystal")
+
+
+def create_boar(ctx):
+    ctx.sphere("Boar massive rounded barrel",(0,.1,1.32),(1.00,1.52,.90),"FurDark")
+    ctx.sphere("Boar lowered head",(0,-1.27,1.25),(.77,.91,.71),"Fur")
+    ctx.sphere("Boar broad snout",(0,-2.0,1.0),(.50,.36,.35),"FurDark")
+    for side in [-1,1]:
+        for y in [-.8,1.0]:
+            ctx.limb("Boar short powerful leg",(side*.65,y,1.13),(side*.70,y,.19),.23,.15,"Fur")
+            ctx.box("Boar cloven hoof",(side*.70,y-.08,.15),(.34,.49,.29),"Obsidian",.07)
+        ctx.curve("Boar curved ivory tusk",[(side*.46,-1.83,.89),(side*.77,-2.09,1.0),(side*.80,-2.11,1.40)],.10,"Ivory")
+        ctx.crystal("Boar alert ear",(side*.60,-1.04,1.75),.24,.55,"Fur",(.2,side*.45,0))
+        ctx.sphere("Boar amber eye",(side*.53,-1.77,1.50),(.095,.09,.075),"SunGlow",1)
+    for j in range(7):ctx.crystal("Boar back bristled mane",(0,-.7+j*.34,1.97),.17,.48,"Fur",(.50,0,0))
+
+
+def create_golem(ctx,gold=False,solar=False):
+    rock="Marble" if solar else "Gold" if gold else "BlueHide";trim="Gold" if solar or gold else "Stone"
+    glow="SunGlow" if solar or gold else "BlueCrystal"
+    ctx.sphere("Golem heavy faceted torso",(0,0,2.73),(1.46,.85,1.55),rock,2)
+    ctx.sphere("Golem lower stone hips",(0,.05,1.48),(1.00,.70,.57),trim,1)
+    ctx.sphere("Golem sculpted stone head",(0,-.05,4.12),(.70,.68,.77),rock,2)
+    ctx.sphere("Golem inset energy breast core",(0,-.81,2.88),(.58,.16,.66),glow,2)
+    for side in [-1,1]:
+        ctx.sphere("Golem rounded shoulder boulder",(side*1.57,0,3.36),(.83,.82,.86),trim,2)
+        ctx.limb("Golem massive upper arm",(side*1.62,0,3.18),(side*2.06,-.18,2.18),.51,.43,rock)
+        ctx.sphere("Golem colossal knuckled fist",(side*2.13,-.32,1.69),(.67,.72,.71),rock,2)
+        for j in range(3):ctx.sphere("Golem separated stone knuckle",(side*2.13+(j-1)*.30,-.94,1.78),(.19,.16,.24),trim,1)
+        ctx.limb("Golem sturdy thigh",(side*.67,.03,1.45),(side*.79,-.04,.58),.45,.39,rock)
+        ctx.sphere("Golem broad stone foot",(side*.80,-.31,.31),(.61,.85,.34),trim,2)
+        ctx.box("Golem bright watchful eye",(side*.24,-.66,4.25),(.24,.09,.105),glow,.025)
+        ctx.curve("Golem luminous breast fracture",[(side*.50,-.80,3.50),(side*.76,-.82,3.2),(side*.62,-.85,3.0),(side*.91,-.69,2.61)],.038,glow)
+    if solar:
+        for j in range(7):
+            a=(j-3)*.32;ctx.crystal("Colossus seven solar crown rays",(math.sin(a)*.65,.03,4.63+math.cos(a)*.25),.12,1.0 if j%2 else .72,"SunGlow",(0,-a*.65,0))
+        ctx.ring("Colossus hovering solar nimbus",(0,0,5.83),1.47,.050,"SunGlow")
+        ctx.ring("Colossus etched gold nimbus",(0,0,5.89),1.68,.065,"Gold")
+
+
+def create_spirit(ctx):
+    ctx.loft("Spirit flowing leaf robe",[(0,0,.25,.92,.69),(0,0,.8,.66,.50),(0,0,1.65,.46,.40),(0,0,2.0,.43,.38)],"Spirit",12,smooth_faces=True)
+    ctx.sphere("Spirit hood",(0,0,2.10),(.65,.57,.77),"PineLight")
+    ctx.sphere("Spirit shadowed face",(0,-.48,2.11),(.41,.12,.40),"Obsidian")
+    for side in [-1,1]:
+        ctx.sphere("Spirit brilliant eye",(side*.17,-.59,2.2),(.07,.045,.10),"BlueEnergy",1)
+        ctx.curve("Spirit vine-like arm",[(side*.40,0,1.7),(side*.97,-.10,1.24),(side*1.15,-.39,1.66)],.11,"Spirit")
+        for j in range(3):ctx.crystal("Spirit leaf crown",(side*.25,-.05,2.65+j*.02),.12,.6,"BushTip",(0,side*(.3+j*.23),0))
+    ctx.ring("Spirit floating rune",(0,0,.13),1.15,.022,"BlueEnergy")
+
+
+def create_harpy(ctx):
+    ctx.sphere("Harpy feathered breast",(0,0,1.75),(.65,.54,.99),"Petal")
+    ctx.sphere("Harpy crowned head",(0,-.13,2.95),(.45,.42,.48),"PurpleHide")
+    ctx.limb("Harpy hooked ivory beak",(0,-.48,2.96),(0,-.95,2.72),.19,.015,"Ivory")
+    for side in [-1,1]:
+        ctx.sphere("Harpy amber eye",(side*.27,-.46,3.09),(.07,.06,.08),"SunGlow",1)
+        ctx.limb("Harpy powerful bird leg",(side*.32,.1,1.05),(side*.43,-.02,.25),.15,.10,"Gold")
+        for j in range(3):ctx.limb("Harpy curved talon",(side*.43,-.02,.25),(side*.43+(j-1)*.20,-.53,.10),.06,.008,"Obsidian",7)
+        for j in range(10):
+            x0=side*.40;y0=.10;z0=2.34;x1=side*(1.45+j*.15);y1=-.3+j*.20;z1=2.93-j*.11
+            ctx.limb("Harpy sculpted flight feather",(x0,y0,z0),(x1,y1,z1),.15,.014,"Petal" if j%2 else "PurpleHide",7)
+        ctx.curve("Harpy leading wing bone",[(side*.35,0,2.3),(side*1.4,-.25,2.95),(side*2.40,.12,2.6)],.10,"Gold")
+    for j in range(3):ctx.crystal("Harpy swept crown feather",((j-1)*.18,.06,3.32),.105,.68,"Gold",(.32,0,0))
+
+
+def create_bear(ctx):
+    ctx.sphere("Bear heavy torso",(0,.24,1.66),(1.22,1.75,1.05),"Fur")
+    ctx.sphere("Bear muscular shoulder hump",(0,-.88,1.95),(1.05,.98,1.09),"FurDark")
+    ctx.sphere("Bear broad head",(0,-1.62,1.85),(.91,.80,.76),"Fur")
+    ctx.sphere("Bear pale muzzle",(0,-2.23,1.62),(.55,.44,.34),"Ivory")
+    ctx.sphere("Bear black nose",(0,-2.60,1.69),(.29,.14,.19),"Obsidian",1)
+    for side in [-1,1]:
+        ctx.sphere("Bear rounded ear",(side*.69,-1.39,2.40),(.25,.21,.29),"FurDark")
+        ctx.sphere("Bear eye",(side*.51,-2.16,2.05),(.07,.07,.07),"SunGlow",1)
+        for y in [-.95,1.2]:
+            ctx.limb("Bear strong foreleg",(side*.77,y,1.5),(side*.84,y-.12,.24),.34,.25,"FurDark")
+            ctx.sphere("Bear heavy paw",(side*.84,y-.25,.21),(.36,.49,.24),"Fur")
+            for j in range(3):ctx.limb("Bear visible ivory claw",(side*.84+(j-1)*.17,y-.58,.24),(side*.84+(j-1)*.17,y-.83,.12),.045,.005,"Ivory",6)
+
+
+def create_scorpion(ctx):
+    ctx.sphere("Scorpion armored body",(0,.18,.90),(1.11,1.64,.62),"Bronze")
+    for j in range(5):ctx.box("Scorpion overlapping dorsal plate",(0,-.85+j*.50,1.26), (1.45,.47,.25),"Gold",.09)
+    for side in [-1,1]:
+        for j in range(4):
+            y=-.55+j*.55;knee=(side*1.8,y+.2,1.0)
+            ctx.limb("Scorpion articulated leg",(side*.8,y,.85),knee,.12,.085,"Bronze")
+            ctx.limb("Scorpion needle foot",knee,(side*2.3,y-.04,.08),.085,.009,"Obsidian")
+        ctx.curve("Scorpion powerful pincer arm",[(side*.65,-.9,.90),(side*1.4,-1.7,.8),(side*1.7,-2.3,1.05)],.18,"Bronze")
+        for finger in [-1,1]:
+            ctx.curve("Scorpion open claw",[(side*1.7,-2.3,1.05),(side*1.7+finger*.4,-2.78,1.24),(side*1.7+finger*.13,-3.2,1.3)],.15,"Gold")
+        ctx.sphere("Scorpion ember eye",(side*.29,-1.20,1.24),(.085,.08,.08),"RedCrystal",1)
+    tail=[(0,1.23,1.0),(0,1.92,1.25),(0,2.36,1.9),(0,2.35,2.72),(0,1.95,3.41),(0,1.23,3.74),(0,.62,3.49)]
+    for j,(a,b) in enumerate(zip(tail,tail[1:])):
+        ctx.limb("Scorpion segmented rising tail",a,b,.31-j*.028,.29-j*.028,"Bronze")
+        ctx.sphere("Scorpion polished tail joint",b,(.29-j*.023,)*3,"Gold",1)
+    ctx.limb("Scorpion venomous crystal sting",tail[-1],(0,.30,2.99),.18,.005,"Amethyst",8)
+
+
+def create_leviathan(ctx):
+    points=[(1.8,2.2,.75),(2.4,.9,1.10),(1.6,-.1,1.70),(.20,0,2.12),
+            (-1.0,1.3,1.91),(-.7,2.8,1.40),(.55,3.6,1.0),(1.9,4.15,.70),(1.6,5.3,.50),(.2,5.9,.70)]
+    radii=[.85,1.06,1.15,1.12,.97,.72,.55,.37,.22,.02]
+    for j,(a,b) in enumerate(zip(points,points[1:])):ctx.limb("Leviathan coiled serpent body",a,b,radii[j],radii[j+1],"PurpleHide",16)
+    ctx.curve("Leviathan curved rising neck",[(.2,0,2.0),(.2,-1.0,3.0),(.1,-1.85,3.85)],.70,"PurpleHide")
+    ctx.sphere("Leviathan sculpted dragon skull",(.1,-2.08,4.0),(.92,1.0,.65),"PurpleHide",2)
+    ctx.sphere("Leviathan long predatory muzzle",(.1,-3.02,3.72),(.62,1.03,.38),"Obsidian",2)
+    ctx.sphere("Leviathan carved lower jaw",(.1,-2.91,3.40),(.57,.85,.18),"Petal",2)
+    for j,p in enumerate(points[:-2]):ctx.crystal("Leviathan dorsal amethyst blade",(p[0],p[1],p[2]+radii[j]*.8),.24*(1-j*.07),1.5-j*.13,"Amethyst",(.1,0,0))
+    for side in [-1,1]:
+        ctx.sphere("Leviathan luminous watchful eye",(.1+side*.72,-2.55,4.13),(.15,.15,.11),"Amethyst",1)
+        ctx.curve("Leviathan swept crown horn",[(.1+side*.64,-1.75,4.42),(.1+side*.96,-1.05,5.11),(.1+side*1.1,-.24,5.50)],.16,"Ivory")
+        for j in range(4):ctx.limb("Leviathan ivory fang",(.1+side*.46,-3.5+j*.27,3.67),(.1+side*.44,-3.5+j*.27,3.39),.06,.004,"Ivory",6)
+        ctx.curve("Leviathan powerful foreleg",[(side*.90,-.2,2.1),(side*1.6,-1.0,.83),(side*1.85,-1.64,.28)],.26,"PurpleHide")
+        for j in range(3):ctx.limb("Leviathan hooked talon",(side*1.85+(j-1)*.18,-1.63,.32),(side*1.85+(j-1)*.18,-2.16,.15),.07,.003,"Ivory",6)
+        wing=[(side*.80,.28,2.4),(side*2.05,.32,4.0),(side*4.8,.65,5.5),(side*5.45,1.45,3.65),
+              (side*4.1,1.73,3.0),(side*4.9,2.86,2.0),(side*3.2,2.72,2.22),(side*3.12,4.0,1.38),(side*1.0,3.03,1.89)]
+        center=(side*2.85,1.8,3.3);verts=wing+[center];faces=[(j,(j+1)%len(wing),len(wing)) for j in range(len(wing))]
+        ctx.mesh("Leviathan scalloped purple wing membrane",verts,faces,"Petal")
+        ctx.curve("Leviathan obsidian leading wing bone",wing[:4],.16,"Obsidian")
+        for j in [3,5,7]:
+            ctx.curve("Leviathan anatomical wing rib",[wing[0],center,wing[j]],.09,"PurpleHide")
+            ctx.curve("Leviathan iridescent wing vein",[(x,y-.03,z+.04) for x,y,z in [wing[0],center,wing[j]]],.026,"Amethyst")
+
+
+MONSTER_BUILDERS = {
+    "Wolf":create_wolf, "Spider":create_spider,
+    "GiantSpider":lambda ctx:create_spider(ctx,True),
+    "Elemental":create_elemental, "Boar":create_boar,
+    "Golem":create_golem, "GoldenGolem":lambda ctx:create_golem(ctx,True),
+    "ForestSpirit":create_spirit, "Harpy":create_harpy,
+    "Bear":create_bear, "GiantScorpion":create_scorpion,
+    "SolarColossus":lambda ctx:create_golem(ctx,True,True),
+    "NightLeviathan":create_leviathan,
+}
+
+
+def create_monster(ctx,kind,position,scale=1.0,boss=False):
+    with ctx.root(kind,position,"boss" if boss else "monster",scale=scale) as root:
+        root["monster_kind"]=kind;MONSTER_BUILDERS[kind](ctx)
+        return root
+
+
+def create_camp(ctx,index,kind,position):
+    ctx.group("MonsterCamps")
+    with ctx.root(f"Camp {index:02d}",(*position,.10),"camp") as root:
+        root["camp_index"]=index;root["monster_kind"]=kind
+        ctx.cylinder("Camp natural clearing",(0,0,-.01),5.45,.10,"Earth",48,.02)
+        for j in range(10):
+            a=j*2*PI/10;ctx.sphere("Camp edge mossy pebble",(5.35*math.cos(a),5.35*math.sin(a),.12),(.30,.26,.20),"Moss",1)
+        count=3 if kind in {"Wolf","Elemental","ForestSpirit"} else 2 if kind in {"Boar","Golem","Harpy","Bear"} else 1
+        scale=.95 if kind in {"Wolf","Boar","Bear"} else .81 if kind=="Golem" else 1.3 if kind in {"GiantSpider","GiantScorpion"} else 1.05
+        for j in range(count):
+            p=(0,0,.10) if count==1 else ((j-(count-1)/2)*2.8, .6 if j%2 else -.3,.10)
+            create_monster(ctx,kind,p,scale*(1.1 if j==0 and count>1 else 1))
+        ctx.text("Camp number",str(index),(0,-4.4,.057),1.5)
+        return root
+
+# -----------------------------------------------------------------------------
+# 7. Свет, камера, рендер и экспорт описания сцены.
+# -----------------------------------------------------------------------------
+def create_lighting_and_camera(ctx):
+    scene=ctx.scene;ctx.group("Lighting")
+    world=bpy.data.worlds.new(PREFIX+"Soft blue fantasy sky");world.use_nodes=True
+    world.node_tree.nodes["Background"].inputs["Color"].default_value=(*srgb("B5D9EE"),1)
+    world.node_tree.nodes["Background"].inputs["Strength"].default_value=.65;scene.world=world
+    data=bpy.data.lights.new(PREFIX+"Warm fantasy sun","SUN");data.energy=2.6;data.color=srgb("FFE2AC");data.angle=math.radians(12)
+    sun=ctx.object("Warm fantasy sun",data,(0,0,140),rotation=(math.radians(22),math.radians(-26),math.radians(-25)))
+    area_data=bpy.data.lights.new(PREFIX+"Blue sky fill","AREA");area_data.energy=18000;area_data.shape="DISK";area_data.size=140;area_data.color=srgb("B5DDF6")
+    area=ctx.object("Blue sky fill",area_data,(20,25,110));area.rotation_euler=(Vector((0,0,0))-area.location).to_track_quat('-Z','Y').to_euler()
+    camera_data=bpy.data.cameras.new(PREFIX+"Orthographic 55 degree camera");camera_data.type="ORTHO";camera_data.ortho_scale=267;camera_data.lens=50;camera_data.clip_end=1200
+    e=math.radians(ctx.cfg.camera_elevation);target=Vector((0,0,-1));position=Vector((0,-340*math.cos(e),340*math.sin(e)))+target
+    camera=ctx.object("Main map camera",camera_data,position);camera.rotation_euler=(target-position).to_track_quat('-Z','Y').to_euler();scene.camera=camera
+    camera["elevation_degrees"]=ctx.cfg.camera_elevation
+    scene.render.engine="CYCLES";scene.cycles.device="CPU";scene.cycles.samples=ctx.cfg.samples
+    scene.cycles.use_adaptive_sampling=True;scene.cycles.adaptive_threshold=.07;scene.cycles.adaptive_min_samples=8
+    scene.cycles.max_bounces=5;scene.cycles.diffuse_bounces=2;scene.cycles.glossy_bounces=2
+    # В отдельных сборках Blender отсутствует OIDN. Не делать рендер зависимым от него.
+    try:scene.cycles.denoiser="OPENIMAGEDENOISE";scene.cycles.use_denoising=True
+    except (TypeError,ValueError):scene.cycles.use_denoising=False
+    scene.render.resolution_x=ctx.cfg.resolution;scene.render.resolution_y=ctx.cfg.resolution;scene.render.resolution_percentage=100
+    scene.render.image_settings.file_format="PNG";scene.render.film_transparent=False
+    scene.render.fps=ctx.cfg.fps;scene.frame_start=1;scene.frame_end=ctx.cfg.frames
+    scene.view_settings.view_transform="AgX"
+    try:scene.view_settings.look="AgX - Medium High Contrast"
+    except (TypeError,ValueError):pass
+    scene.view_settings.exposure=.3
+    # Совместимый с Blender 4.0–4.3 композитор: небольшое свечение, без белой засветки.
+    scene.use_nodes=True;nodes=scene.node_tree.nodes;nodes.clear();layer=nodes.new("CompositorNodeRLayers");glare=nodes.new("CompositorNodeGlare");glare.glare_type="FOG_GLOW";glare.quality="MEDIUM";glare.threshold=2;glare.size=7;glare.mix=-.92;output=nodes.new("CompositorNodeComposite")
+    scene.node_tree.links.new(layer.outputs["Image"],glare.inputs["Image"]);scene.node_tree.links.new(glare.outputs["Image"],output.inputs["Image"])
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type=="VIEW_3D":
+                area.spaces.active.region_3d.view_perspective="CAMERA"
+                area.spaces.active.clip_end=1500
+
+
+def validate_scene(ctx):
+    roots=[o for o in ctx.scene.objects if o.get("category")]
+    def items(category):return [o for o in roots if o.get("category")==category]
+    towers=items("tower");assert len(towers)==18
+    for lane,teams in TOWERS.items():
+        for team,entries in teams.items():
+            for tier,x,y in entries:
+                obj=next(o for o in towers if o["lane"]==lane and o["team"]==team and o["tier"]==tier)
+                assert math.hypot(obj.location.x-x,obj.location.y-y)<1e-6,(lane,team,tier)
+    assert len(items("nexus"))==2 and len(items("boss"))==2
+    assert len(items("stone_bridge"))==3 and len(items("energy_bridge"))==2
+    assert len(items("camp"))==12 and len(items("crystal_gate"))==8 and len(items("clearing"))==4
+    for _,kind,_ in CAMPS:assert kind in MONSTER_BUILDERS
+    ground=items("playable_terrain")[0]
+    assert min(v.co.x for v in ground.data.vertices)==-100 and max(v.co.x for v in ground.data.vertices)==100
+    assert min(v.co.y for v in ground.data.vertices)==-100 and max(v.co.y for v in ground.data.vertices)==100
+    assert len(items("tree"))>=min(200,ctx.cfg.tree_count),"Insufficient forest; check placement filters"
+    # Не маскируем недобор густоты леса молчаливым успехом.
+    for obj in items("tree"):
+        assert all(math.dist(obj.location.xy,p)>11.5 for p in CLEARINGS.values()),"A tree intrudes into a clearing"
+    for obj in ctx.scene.objects:
+        if obj.type=="MESH":
+            assert len(obj.data.vertices)>0 and all(math.isfinite(v) for p in obj.data.vertices for v in p.co),obj.name
+    assert ctx.scene.camera.data.type=="ORTHO"
+    ctx.scene.frame_set(1)
+    invalid=[]
+    for obj in ctx.scene.objects:
+        if obj.animation_data:
+            for curve in obj.animation_data.drivers:
+                if not curve.driver.is_valid:invalid.append((obj.name,curve.data_path))
+    assert not invalid,invalid
+    print("VALIDATION PASS: 200x200, 18 exact towers, 2 bases, 2 bosses, 12 camps, 4 clearings, 8 gates, 3 stone + 2 energy bridges",flush=True)
+    return {"categories":{key:len(items(key)) for key in sorted({o["category"] for o in roots})},"objects":len(ctx.scene.objects),"unique_meshes":len({o.data for o in ctx.scene.objects if o.type=="MESH"})}
+
+
+def export_layout(ctx,validation):
+    def xy(p):return {"X":p[0],"Y":p[1]}
+    data={"name":"Долина Осколков","generator_version":"1.0","seed":ctx.cfg.seed,"coordinate_system":"X/Y ground, Z height","playable_size":200,
+          "towers":[{"team":team,"lane":lane,"tier":tier,"position":xy((x,y))} for lane,teams in TOWERS.items() for team,entries in teams.items() for tier,x,y in entries],
+          "bases":{key:xy(p) for key,p in BASES.items()},"bosses":{key:xy(p) for key,p in BOSSES.items()},
+          "clearings":{key:xy(p) for key,p in CLEARINGS.items()},"camps":[{"id":i,"kind":kind,"position":xy(p)} for i,kind,p in CAMPS],
+          "river":[xy(p) for p in ctx.river],"lanes":{key:[xy(p) for p in points] for key,points in ctx.lanes.items()},
+          "stone_bridges":[{"lane":key,"position":xy(p)} for key,p in STONE_BRIDGES],"energy_bridges":[{"kind":key,"position":xy(p)} for key,p in ENERGY_BRIDGES],
+          "crystals":[{"id":i+1,"position":xy(p),"durability":24,"respawn_seconds":60,"short_path":[xy(q) for q in ctx.gates[i]]} for i,(p,_) in enumerate(CRYSTAL_GATES)],
+          "trees":[xy(p) for p in ctx.registry["trees"]],"validation":validation}
+    (ctx.cfg.output/"ValleyOfShards.layout.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+
+
+def build_map(config):
+    if bpy.app.version<(4,0,0):raise RuntimeError("Blender 4.0 or newer is required")
+    config.output.mkdir(parents=True,exist_ok=True);ctx=Context(config)
+    create_materials(ctx);print("MATERIALS READY",flush=True)
+    create_terrain(ctx)
+    for name,points in ctx.lanes.items():create_lane(ctx,name,points)
+    ctx.group("Trails")
+    for i,points in enumerate(ctx.paths):create_path(ctx,points,3.5,name=f"Forest trail {i+1}")
+    create_river(ctx)
+    for lane,p in STONE_BRIDGES:create_bridge(ctx,lane+" arched stone bridge",p)
+    for name,p in ENERGY_BRIDGES:create_bridge(ctx,name+" narrow energy bridge",p,"gold" if name=="Dawn" else "blue")
+    for name,p in CLEARINGS.items():create_clearing(ctx,name,p)
+    for team,p in BASES.items():create_nexus(ctx,team,p)
+    for lane,teams in TOWERS.items():
+        for team,entries in teams.items():
+            for tier,x,y in entries:create_tower(ctx,team,tier,(x,y),lane)
+    create_arena(ctx,"Dawn arena",BOSSES["SolarColossus"])
+    create_arena(ctx,"Night Leviathan lair",BOSSES["NightLeviathan"],True)
+    ctx.group("Bosses")
+    create_monster(ctx,"SolarColossus",(-75,80,.76),2.05,True)
+    create_monster(ctx,"NightLeviathan",(75,-75,.76),1.65,True)
+    for i,kind,p in CAMPS:create_camp(ctx,i,kind,p)
+    for i,(p,toward) in enumerate(CRYSTAL_GATES,1):create_crystal_gate(ctx,i,p,toward)
+    create_forest(ctx);create_cliffs_and_waterfalls(ctx);create_lighting_and_camera(ctx)
+    validation=validate_scene(ctx);export_layout(ctx,validation)
+    scene=ctx.scene;scene.frame_set(1)
+    # Пакуем найденный системный шрифт. Процедурным материалам нечего искать на диске.
+    if ctx.font:
+        try:ctx.font.pack()
+        except (AttributeError,RuntimeError):pass
+    path=config.output/"ValleyOfShards.blend";scene.render.filepath=str(config.output/"ValleyOfShards.png")
+    bpy.ops.wm.save_as_mainfile(filepath=str(path),compress=True)
+    print(f"SAVED {path}",flush=True)
+    if config.render:
+        bpy.ops.render.render(write_still=True,scene=scene.name)
+        print("OVERVIEW RENDERED",flush=True)
+    if config.detail_renders:render_details(ctx)
+    print("GENERATION COMPLETE",json.dumps(validation,ensure_ascii=False),flush=True)
+    return ctx
+
+
+def render_details(ctx):
+    scene=ctx.scene;camera=scene.camera;old=(camera.location.copy(),camera.rotation_euler.copy(),camera.data.ortho_scale,scene.render.resolution_x,scene.render.resolution_y)
+    shots=[("Valley_Detail",(-31,-53,66),(-20,0,1),100),
+           ("Valley_Dawn",(-94,48,38),(-72,72,2),52)]
+    for name,position,target,scale in shots:
+        camera.location=position;camera.rotation_euler=(Vector(target)-camera.location).to_track_quat('-Z','Y').to_euler();camera.data.ortho_scale=scale
+        scene.render.resolution_x=1280;scene.render.resolution_y=960;scene.render.filepath=str(ctx.cfg.output/(name+".png"));bpy.ops.render.render(write_still=True,scene=scene.name)
+    camera.location,camera.rotation_euler,camera.data.ortho_scale,scene.render.resolution_x,scene.render.resolution_y=old
+
+
+def parse_args():
+    argv=sys.argv[sys.argv.index("--")+1:] if "--" in sys.argv else []
+    parser=argparse.ArgumentParser(description="Generate the 200x200 Valley of Shards in Blender 4.0+")
+    script=Path(__file__).resolve() if "__file__" in globals() else None
+    default=(script.parent if script and script.is_file() else Path(bpy.path.abspath("//")))/"output"
+    parser.add_argument("--out",type=Path,default=default);parser.add_argument("--seed",type=int,default=1649)
+    parser.add_argument("--render",action="store_true");parser.add_argument("--detail-renders",action="store_true")
+    parser.add_argument("--resolution",type=int,default=1440);parser.add_argument("--samples",type=int,default=32)
+    parser.add_argument("--trees",type=int,default=360);parser.add_argument("--no-labels",action="store_true")
+    args=parser.parse_args(argv)
+    if args.trees<0 or args.trees>1000:parser.error("--trees must be between 0 and 1000")
+    if args.resolution<320 or args.resolution>8192:parser.error("--resolution must be between 320 and 8192")
+    if args.samples<1:parser.error("--samples must be positive")
+    return Config(output=args.out.resolve(),seed=args.seed,render=args.render,detail_renders=args.detail_renders,resolution=args.resolution,samples=args.samples,tree_count=args.trees,labels=not args.no_labels)
+
+
+if __name__=="__main__":
+    build_map(parse_args())
