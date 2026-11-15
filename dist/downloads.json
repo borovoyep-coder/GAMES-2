@@ -1,0 +1,38 @@
+{
+  "Version": "0.5",
+  "Bundles": {
+    "unity05": {
+      "Name": "ShatteredWorld_Unity_Ultra_0.5.zip",
+      "Title": "Проект Unity 0.5",
+      "Description": "Готовые модели, код, сцены-генераторы, механики карты и анимации. Для открытия Blender не требуется.",
+      "Bytes": 45782014,
+      "Sha256": "2bdb592683f0523c6537c1c187c64ae0aa12089277a36f1cf46b0b0c36f841cf",
+      "Chunks": [
+        {
+          "File": "assets/ShatteredWorld_Unity_Ultra_0.5.zip.part01",
+          "Bytes": 23068672,
+          "Sha256": "e9af56d83e88bc3f4b86ebe18852f36c7cfbe8d07d7527b2a6b555325f818ed6"
+        },
+        {
+          "File": "assets/ShatteredWorld_Unity_Ultra_0.5.zip.part02",
+          "Bytes": 22713342,
+          "Sha256": "6fbaf3593e7ad7dce29b641e39fd13e29954c62cba9c7a92862d0ad5cfdf7f8b"
+        }
+      ]
+    },
+    "studio05": {
+      "Name": "ShatteredWorld_Blender_Studio_0.5.zip",
+      "Title": "Blender Studio 0.5",
+      "Description": "Редактируемая сцена с упакованными текстурами, 36 статических и 30 анимационных FBX. Для пересборки распакуйте поверх проекта Unity.",
+      "Bytes": 20903141,
+      "Sha256": "0656842f2e026dfe308b467baae31edf80460206aad780dea626cc6ae9326e96",
+      "Chunks": [
+        {
+          "File": "assets/ShatteredWorld_Blender_Studio_0.5.zip",
+          "Bytes": 20903141,
+          "Sha256": "0656842f2e026dfe308b467baae31edf80460206aad780dea626cc6ae9326e96"
+        }
+      ]
+    }
+  }
+}
