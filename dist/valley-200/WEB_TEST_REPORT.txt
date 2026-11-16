@@ -1,6 +1,15 @@
 PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, eight gates and five bridges
-PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 413 meshes 2680434 vertices 1526516 triangles
-PASS 311 actor transforms, particle tracks and axis conversion
+PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 443 meshes 2815790 vertices 1605098 triangles
+PASS 265 actor transforms, particle tracks and axis conversion
 PASS all eight crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
 PASS descriptions, DOM bindings, local links, shader injection targets and source archive
+PASS four exported image textures, ten physical hero roots at Y=0 and fountain metadata
 VALLEY200 CPU CHECKS PASSED; WebGL rendering/browser interaction not executed.
+
+PASS exact bridge schedule: closed 0–120, Dawn 120–240, Dusk 240–360, alternating; warning at 15 seconds
+PASS flat movement, collision masks, three permanent lanes, 18 tower paths and four boss entrances with all optional routes closed
+PASS all 8 shortcuts: 24 HP, six melee hits / eight ranged projectiles, cooldown, fixed damage, 60-second regeneration and occupancy delay
+PASS allied fountain HP/mana restoration, enemy exclusion, trigger radius and maximum clamping
+PASS four closure cases: ten heroes, nearest shore, smooth protected ejection, no bridge damage and Y=0 throughout
+PASS planar projectiles, enemy hero damage and respawn at the fountain
+GAMEPLAY 200.3 CHECKS PASSED; local simulation only, browser/WebGL/network match not executed.
