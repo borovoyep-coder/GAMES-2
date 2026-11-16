@@ -207,7 +207,7 @@ class Context:
         self.scene=bpy.data.scenes.new(SCENE_NAME)
         if bpy.context.window:bpy.context.window.scene=self.scene
         if temporary:bpy.data.scenes.remove(temporary)
-        self.scene["generator_version"]="1.0"
+        self.scene["generator_version"]="1.1"
         self.scene["seed"]=config.seed
         self.scene["playable_bounds"]=[-100,100,-100,100]
         self.scene["coordinate_system"]="Blender XY ground; Z up"
@@ -317,6 +317,12 @@ class Context:
         obj=self.loft(name,[(0,0,0,radius*.58,radius*.58),(0,0,height*.13,radius,radius),
                             (0,0,height*.73,radius*.81,radius*.81),(0,0,height,0.005,0.005)],mat,6,bevel=.018)
         obj.location=p;obj.rotation_euler=tilt
+        if mat in {"BlueCrystal","RedCrystal","Amethyst","SunGlow"}:
+            previous=self.parent;self.parent=obj
+            a=-PI/3;normal=Vector((math.cos(a),math.sin(a),0));tangent=Vector((-normal.y,normal.x,0));base=normal*(radius*.89+.026)
+            pts=[tuple(base-tangent*radius*.045+Vector((0,0,height*.25))),tuple(base+tangent*radius*.018+Vector((0,0,height*.25))),tuple(base*.86+Vector((0,0,height*.69)))]
+            self.mesh("Inset crystal refracted facet",pts,[(0,1,2)],"CrystalEdge")
+            self.parent=previous
         return obj
 
     def text(self,name,text,p,size=1.7,mat="Ink",rotation=(0,0,0)):
@@ -397,20 +403,23 @@ def water_material(ctx,name,dark,light,outer=False):
 
 def create_materials(ctx):
     specs={
-        "Grass":("397936","88B950",.92,0,0), "Moss":("387F3D","A1C75A",.9,0,0),
-        "Earth":("665039","B18B5D",.98,0,0), "EarthEdge":("5B4939","957449",.93,0,0),
+        "Grass":("427C38","A0BF5B",.92,0,0), "Moss":("387F3D","A1C75A",.9,0,0),
+        "Earth":("695035","B49663",.98,0,0), "EarthEdge":("5B4939","957449",.93,0,0),
         "Lane":("B6A185","E6D5B7",.76,0,0), "LaneLight":("C3AF93","EDDFC6",.75,0,0),
         "LaneWarm":("A9967E","D6C0A5",.78,0,0), "LaneJoint":("655E50","9B8D70",.95,0,0),
         "Stone":("6B8077","BDCAAA",.85,0,0), "Marble":("C1C8B4","FFF3D6",.58,.06,0),
         "StoneDark":("212336","534454",.73,.15,0), "Obsidian":("161625","3C2A4F",.29,.38,0),
         "Gold":("9C6A25","FFD371",.38,.72,0), "Bronze":("583E31","BD8651",.47,.65,0),
         "Wood":("3D3025","997348",.92,0,0),
+        "CrimsonStone":("311A29","8E4550",.65,.10,0), "CrystalEdge":("93CFEA","E7FAFF",.18,.12,1.15),
+        "GrassBlade":("4E8D39","BAD36A",.88,0,0), "FlowerBlue":("597BB9","BCDEF1",.72,0,.05),
+        "FlowerCream":("D0AB5A","FFF2AD",.73,0,0),
         "PineDark":("143D31","296A43",.94,0,0), "Pine":("246C3F","4C9250",.9,0,0),
         "PineLight":("468644","87B65B",.87,0,0), "Bush":("4B8D2E","B8D94C",.89,0,0),
         "BushTip":("85AD35","E0EA72",.84,0,0),
         "BlueCrystal":("086AAB","39CFFF",.20,.16,2.5),
         "RedCrystal":("A7092D","FF3C55",.20,.15,1.45),
-        "Amethyst":("5723A5","C15AFF",.22,.22,1.9),
+        "Amethyst":("5825A3","BD54F6",.22,.22,1.45),
         "SunGlow":("D99020","FFF0AC",.22,.15,2.0),
         "GoldEnergy":("DFAD35","FFF3B2",.24,.05,2.2),
         "BlueEnergy":("287FCA","9BEDFF",.15,.05,1.7),
@@ -473,7 +482,7 @@ def create_path(ctx,points,width,material="Earth",name="Woodland trail"):
 def create_lane(ctx,name,points):
     ctx.group("Roads");w=ctx.cfg.road_width;sample=path_samples(points,1.75)
     create_path(ctx,points,w+.5,"LaneJoint",name+" road foundation")
-    groups=[([],[]) for _ in range(3)];columns=6
+    groups=[([],[]) for _ in range(3)];columns=6;curb_v=[];curb_f=[]
     layer_z={"Top":0,"Mid":.009,"Bot":.018}[name]
     for row,(a,b) in enumerate(zip(sample,sample[1:])):
         d=Vector(b)-Vector(a);d.normalize();middle=(Vector(a)+Vector(b))*.5
@@ -485,8 +494,14 @@ def create_lane(ctx,name,points):
             q=[Vector(a)+na*lo,Vector(b)+nb*lo,Vector(b)+nb*hi,Vector(a)+na*hi]
             c=sum(q,Vector((0,0)))/4;q=[tuple(c+(p-c)*.956) for p in q]
             index=(col+int(middle.x*7+middle.y*3))%3;vs,fs=groups[index];add_prism(vs,fs,q,.08+layer_z,.30+layer_z)
+        for side in [-1,1]:
+            lo=side*(w/2+.04);hi=side*(w/2+.47)
+            q=[Vector(a)+na*lo,Vector(b)+nb*lo,Vector(b)+nb*hi,Vector(a)+na*hi]
+            c=sum(q,Vector((0,0)))/4;q=[tuple(c+(v-c)*.96) for v in q]
+            add_prism(curb_v,curb_f,q,.10+layer_z,.39+layer_z)
         # Отдельные инкрустированные сегменты светящейся золотой оси.
         ctx.curve(name+" divine center inlay",[(a[0],a[1],.324+layer_z),(b[0],b[1],.324+layer_z)],.075,"SunGlow")
+    if curb_v:ctx.mesh(name+" hand cut edging stones",curb_v,curb_f,"LaneLight",bevel=.035)
     for mat,(vertices,faces) in zip(["Lane","LaneLight","LaneWarm"],groups):
         if vertices:ctx.mesh(name+" individually bevelled pavers",vertices,faces,mat,bevel=.035)
 
@@ -592,7 +607,11 @@ def create_cliffs_and_waterfalls(ctx):
         for j in range(35):
             t=-100+j*200/34;x,y=(t,-101) if side==0 else (101,t) if side==1 else (t,101) if side==2 else (-101,t)
             if any(math.dist((x,y),p)<5.6 for p in starts):continue
-            create_rock(ctx,"Soft eroded layered edge cliff",(x,y,-6),(4.0,4.0,12.0+j%3),seed=j+side*31)
+            seed=j+side*31;zz=-11.8+math.sin(seed*1.93)*.8;height=16.0+(j%3)*.5
+            create_rock(ctx,"Weathered continuous island escarpment",(x,y,zz),(5.6+(j%2)*.6,5.2,height),seed=seed)
+            if j%3==0:
+                offset=Vector((x,y)).normalized()*7
+                create_rock(ctx,"Lower buttress geological terrace",(x+offset.x,y+offset.y,-16+(seed+4)*.004),(6.4,5.7,12),seed=seed+4)
     for name,points in flows:create_waterfall(ctx,name,points)
 
 # -----------------------------------------------------------------------------
@@ -617,6 +636,15 @@ def create_tree(ctx,position,height=9.0,variant=0):
             verts.extend((math.cos(j*2*PI/10)*r,math.sin(j*2*PI/10)*r,z) for j in range(10))
         for row in range(2):
             for j in range(10):faces.append((start+row*10+j,start+row*10+(j+1)%10,start+(row+1)*10+(j+1)%10,start+(row+1)*10+j));indices.append(0)
+        for branch in range(18):
+            a=branch*2.39996+variant*.21;z=2.35+(branch%5)*1.03;r=2.7-(branch%5)*.36;start=len(verts)
+            for side,dist,dz in [(-1,.25,.25),(-1,.85,-.1),(0,1.12,-.30),(1,.85,-.1),(1,.25,.25),(0,.6,.32)]:
+                verts.append((math.cos(a)*r*dist-math.sin(a)*side*.24,math.sin(a)*r*dist+math.cos(a)*side*.24,z+dz))
+            for f in [(0,1,5),(1,2,5),(2,3,5),(3,4,5),(4,0,5)]:faces.append(tuple(start+i for i in f));indices.append(2 if branch%3 else 3)
+        for j in range(5):
+            a=j*2*PI/5+variant*.1;start=len(verts)
+            for da,r,z in [(-.12,.22,.02),(-.20,.65,0),(.20,.65,0),(.12,.22,.02),(0,.24,.62)]:verts.append((math.cos(a+da)*r,math.sin(a+da)*r,z))
+            for f in [(0,1,4),(1,2,4),(2,3,4),(3,0,4)]:faces.append(tuple(start+i for i in f));indices.append(0)
         proto=ctx.mesh("Lush pine prototype",verts,faces,["Wood","PineDark","Pine","PineLight"],indices)
         ctx.cache[key]=proto.data;bpy.data.objects.remove(proto,do_unlink=True)
     obj=ctx.object("Forest pine",ctx.cache[key],position,(height/9,height/9,height/9),rotation=(0,0,variant*.71))
@@ -690,9 +718,12 @@ def create_forest(ctx):
         create_ruin_arch(ctx,(*p,ctx.height(*p)),angle)
     ctx.group("Forest");positions=[];attempts=0
     while len(positions)<ctx.cfg.tree_count and attempts<35000:
-        attempts+=1;p=(ctx.rng.uniform(-94,94),ctx.rng.uniform(-94,94))
+        attempts+=1
+        core=len([q for q in positions if max(abs(q[0]),abs(q[1]))<60])
+        limit=59 if core<min(180,int(ctx.cfg.tree_count*.5)) and attempts%4!=0 else 94
+        p=(ctx.rng.uniform(-limit,limit),ctx.rng.uniform(-limit,limit))
         if not ctx.clear_for_foliage(p,1.0):continue
-        if any(math.dist(p,q)<4.0 for q in positions) or any(math.dist(p,q)<4.7 for q in ruins):continue
+        if any(math.dist(p,q)<(3.5 if max(abs(p[0]),abs(p[1]))<60 else 4.4) for q in positions) or any(math.dist(p,q)<4.7 for q in ruins):continue
         positions.append(p);height=ctx.rng.uniform(7.2,10.4);create_tree(ctx,(*p,ctx.height(*p)),height,len(positions)%23)
     # Кусты вдоль границ полян и троп, а не случайно в центре дороги.
     bushes=[]
@@ -784,7 +815,7 @@ def create_tower(ctx,team,tier,position,lane="Mid"):
 
 
 def create_nexus(ctx,team,position):
-    ctx.group("Bases");light=team=="Light";stone="Marble" if light else "StoneDark";metal="Gold" if light else "Bronze";glow="BlueCrystal" if light else "RedCrystal"
+    ctx.group("Bases");light=team=="Light";stone="Marble" if light else "CrimsonStone";metal="Gold" if light else "Bronze";glow="BlueCrystal" if light else "RedCrystal"
     with ctx.root("Nexus "+team,(*position,.12),"nexus") as root:
         root["team"]=team
         ctx.cylinder("Nexus plaza round foundation",(0,0,.1),14.1,.35,stone,64,.08)
@@ -981,7 +1012,7 @@ def create_leviathan(ctx):
     points=[(1.8,2.2,.75),(2.4,.9,1.10),(1.6,-.1,1.70),(.20,0,2.12),
             (-1.0,1.3,1.91),(-.7,2.8,1.40),(.55,3.6,1.0),(1.9,4.15,.70),(1.6,5.3,.50),(.2,5.9,.70)]
     radii=[.85,1.06,1.15,1.12,.97,.72,.55,.37,.22,.02]
-    for j,(a,b) in enumerate(zip(points,points[1:])):ctx.limb("Leviathan coiled serpent body",a,b,radii[j],radii[j+1],"PurpleHide",16)
+    create_swept_body(ctx,"Leviathan continuous sculpted serpent",points,radii,"PurpleHide")
     ctx.curve("Leviathan curved rising neck",[(.2,0,2.0),(.2,-1.0,3.0),(.1,-1.85,3.85)],.70,"PurpleHide")
     ctx.sphere("Leviathan sculpted dragon skull",(.1,-2.08,4.0),(.92,1.0,.65),"PurpleHide",2)
     ctx.sphere("Leviathan long predatory muzzle",(.1,-3.02,3.72),(.62,1.03,.38),"Obsidian",2)
@@ -995,8 +1026,14 @@ def create_leviathan(ctx):
         for j in range(3):ctx.limb("Leviathan hooked talon",(side*1.85+(j-1)*.18,-1.63,.32),(side*1.85+(j-1)*.18,-2.16,.15),.07,.003,"Ivory",6)
         wing=[(side*.80,.28,2.4),(side*2.05,.32,4.0),(side*4.8,.65,5.5),(side*5.45,1.45,3.65),
               (side*4.1,1.73,3.0),(side*4.9,2.86,2.0),(side*3.2,2.72,2.22),(side*3.12,4.0,1.38),(side*1.0,3.03,1.89)]
-        center=(side*2.85,1.8,3.3);verts=wing+[center];faces=[(j,(j+1)%len(wing),len(wing)) for j in range(len(wing))]
-        ctx.mesh("Leviathan scalloped purple wing membrane",verts,faces,"Petal")
+        center=(side*2.85,1.8,3.3);verts=[center];faces=[];n=len(wing)
+        for rr in [.28,.62,1.0]:
+            for p in wing:
+                v=Vector(center)+(Vector(p)-Vector(center))*rr;v.z+=math.sin(rr*PI)*.25;verts.append(tuple(v))
+        for j in range(n):faces.append((0,1+j,1+(j+1)%n))
+        for row in range(2):
+            for j in range(n):faces.append((1+row*n+j,1+row*n+(j+1)%n,1+(row+1)*n+(j+1)%n,1+(row+1)*n+j))
+        ctx.mesh("Leviathan curved scalloped wing membrane",verts,faces,"Petal",smooth_faces=True)
         ctx.curve("Leviathan obsidian leading wing bone",wing[:4],.16,"Obsidian")
         for j in [3,5,7]:
             ctx.curve("Leviathan anatomical wing rib",[wing[0],center,wing[j]],.09,"PurpleHide")
@@ -1017,7 +1054,7 @@ MONSTER_BUILDERS = {
 
 def create_monster(ctx,kind,position,scale=1.0,boss=False):
     with ctx.root(kind,position,"boss" if boss else "monster",scale=scale) as root:
-        root["monster_kind"]=kind;MONSTER_BUILDERS[kind](ctx)
+        root["monster_kind"]=kind;MONSTER_BUILDERS[kind](ctx);decorate_monster(ctx,kind)
         return root
 
 
@@ -1112,7 +1149,7 @@ def validate_scene(ctx):
 
 def export_layout(ctx,validation):
     def xy(p):return {"X":p[0],"Y":p[1]}
-    data={"name":"Долина Осколков","generator_version":"1.0","seed":ctx.cfg.seed,"coordinate_system":"X/Y ground, Z height","playable_size":200,
+    data={"name":"Долина Осколков","generator_version":"1.1","seed":ctx.cfg.seed,"coordinate_system":"X/Y ground, Z height","playable_size":200,
           "towers":[{"team":team,"lane":lane,"tier":tier,"position":xy((x,y))} for lane,teams in TOWERS.items() for team,entries in teams.items() for tier,x,y in entries],
           "bases":{key:xy(p) for key,p in BASES.items()},"bosses":{key:xy(p) for key,p in BOSSES.items()},
           "clearings":{key:xy(p) for key,p in CLEARINGS.items()},"camps":[{"id":i,"kind":kind,"position":xy(p)} for i,kind,p in CAMPS],
@@ -1121,6 +1158,127 @@ def export_layout(ctx,validation):
           "crystals":[{"id":i+1,"position":xy(p),"durability":24,"respawn_seconds":60,"short_path":[xy(q) for q in ctx.gates[i]]} for i,(p,_) in enumerate(CRYSTAL_GATES)],
           "trees":[xy(p) for p in ctx.registry["trees"]],"validation":validation}
     (ctx.cfg.output/"ValleyOfShards.layout.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+
+
+# -----------------------------------------------------------------------------
+# Художественная проработка 1.1: органические поверхности и природные переходы.
+# -----------------------------------------------------------------------------
+def create_swept_body(ctx,name,points,radii,material,sides=16):
+    samples=catmull(points,6);vertices=[];faces=[]
+    for i,p in enumerate(samples):
+        t=i/(len(samples)-1)*(len(radii)-1);j=min(len(radii)-2,int(t));f=t-j;r=radii[j]*(1-f)+radii[j+1]*f
+        tangent=Vector(samples[min(i+1,len(samples)-1)])-Vector(samples[max(0,i-1)]);rotation=tangent.to_track_quat('Z','Y')
+        for k in range(sides):
+            a=k*2*PI/sides;v=rotation@Vector((math.cos(a)*r,math.sin(a)*r*.90,0))+Vector(p);vertices.append(tuple(v))
+        if i:
+            for k in range(sides):faces.append(((i-1)*sides+k,(i-1)*sides+(k+1)%sides,i*sides+(k+1)%sides,i*sides+k))
+    faces.extend([tuple(reversed(range(sides))),tuple((len(samples)-1)*sides+k for k in range(sides))])
+    return ctx.mesh(name,vertices,faces,material,smooth_faces=True)
+
+
+def create_detail_leaf(ctx,name,base,tip,width,material):
+    a=Vector(base);b=Vector(tip);d=b-a;normal=Vector((-d.y,d.x,0)).normalized()
+    if normal.length<.01:normal=Vector((1,0,0))
+    center=a+d*.48+Vector((0,0,width*.25));vertices=[tuple(a),tuple(a+d*.30-normal*width*.55),tuple(a+d*.72-normal*width*.38),tuple(b),tuple(a+d*.72+normal*width*.38),tuple(a+d*.30+normal*width*.55),tuple(center)]
+    return ctx.mesh(name,vertices,[(0,1,6),(1,2,6),(2,3,6),(3,4,6),(4,5,6),(5,0,6)],material)
+
+
+def decorate_monster(ctx,kind):
+    if kind in {"Wolf","Bear","Boar"}:
+        fur="Ivory" if kind=="Wolf" else "Fur" if kind=="Bear" else "FurDark"
+        for side in [-1,1]:
+            for j in range(5):
+                x=side*(.50+j*.045);y=-.8+j*.23;z=2.05-j*.03
+                create_detail_leaf(ctx,"Layered sculpted animal ruff",(x,y,z),(x+side*.27,y+.32,z-.41),.28,fur)
+        if kind=="Wolf":
+            for side in [-1,1]:
+                ctx.curve("Wolf expressive silver brow",[(side*.25,-1.90,2.67),(side*.44,-1.83,2.64),(side*.56,-1.70,2.58)],.035,"Ivory")
+            for j in range(4):ctx.crystal("Wolf small moon dorsal gem",(0,-.2+j*.36,2.19),.09,.28,"BlueCrystal")
+        elif kind=="Bear":
+            for side in [-1,1]:ctx.curve("Bear mossy shoulder sigil",[(side*.80,-.81,2.55),(side*1.0,-.53,2.30),(side*.87,-.24,2.25)],.035,"Spirit")
+    elif kind in {"Spider","GiantSpider"}:
+        for j in range(5):
+            y=.05+j*.38;ctx.curve("Spider polished abdominal carapace seam",[(-.67,y,1.87),(0,y,2.22),(.67,y,1.87)],.035,"Gold")
+        for side in [-1,1]:
+            for j in range(4):ctx.sphere("Spider articulated jade knee",(side*(2+math.sin(j)*.3),-.98+j*.6+(j-1.5)*.36,1.7),(.16,.16,.17),"BlueHide" if kind=="Spider" else "Amethyst",1)
+    elif kind in {"Golem","GoldenGolem","SolarColossus"}:
+        gold=kind!="Golem";glow="SunGlow" if gold else "BlueCrystal"
+        for side in [-1,1]:
+            for j in range(3):
+                ctx.crystal("Golem inset shoulder mineral",(side*(1.32+j*.23),-.48,3.75-j*.18),.11,.45,glow,(.22,side*.4,0))
+            ctx.curve("Golem chased breastplate trim",[(side*.23,-.86,3.57),(side*.75,-.79,3.72),(side*1.12,-.63,3.26)],.055,"Gold" if gold else "Ivory")
+        if kind=="SolarColossus":
+            # The shield is deliberately stone-and-gold, distinct from the jungle golem.
+            center=Vector((-2.18,-1.08,2.44));outline=[(-.91,.75),(-.77,1.08),(.77,1.08),(.91,.75),(.72,-.55),(0,-1.13),(-.72,-.55)]
+            for inset,mat,y in [(1.0,"Gold",0),(.84,"Marble",-.13)]:
+                verts=[tuple(center+Vector((x*inset,yy+y,z*inset))) for yy in [-.10,.10] for x,z in outline];n=len(outline);faces=[tuple(reversed(range(n))),tuple(range(n,2*n))]+[(i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n)]
+                ctx.mesh("Colossus royal sun shield",verts,faces,mat,bevel=.045)
+            ctx.sphere("Colossus shield solar disc",tuple(center+Vector((0,-.28,.17))),(.31,.08,.31),"SunGlow",2)
+            for j in range(8):
+                a=j*PI/4;ctx.limb("Colossus shield sunburst",tuple(center+Vector((math.cos(a)*.37,-.29,.17+math.sin(a)*.37))),tuple(center+Vector((math.cos(a)*.58,-.29,.17+math.sin(a)*.58))),.035,.014,"Gold",6)
+    elif kind=="ForestSpirit":
+        for side in [-1,1]:
+            for j in range(4):create_detail_leaf(ctx,"Spirit layered living leaf mantle",(side*.36,.14+j*.12,1.83),(side*(.70+j*.09),.24+j*.15,.50),.45,"PineLight" if j%2 else "Bush")
+        ctx.sphere("Spirit amber collar gem",(0,-.44,1.68),(.14,.08,.17),"SunGlow",1)
+    elif kind=="Harpy":
+        for side in [-1,1]:
+            for j in range(7):
+                create_detail_leaf(ctx,"Harpy overlapping sculpted flight plume",(side*.62,.1,2.39),(side*(1.63+j*.17),.23+j*.16,2.77-j*.10),.21,"Ivory" if j%3==0 else "Petal")
+    elif kind=="GiantScorpion":
+        for j in range(5):ctx.crystal("Scorpion dorsal venom mineral",(0,-.60+j*.42,1.44),.13,.40,"Amethyst")
+    elif kind=="NightLeviathan":
+        for side in [-1,1]:
+            for j in range(8):
+                create_detail_leaf(ctx,"Leviathan layered iridescent neck scale",(.1+side*.40,-.55-j*.15,2.5+j*.14),(.1+side*.68,-.32-j*.15,2.3+j*.14),.24,"PurpleHide" if j%2 else "Petal")
+            for j in range(3):ctx.crystal("Leviathan cheek amethyst fan",(.1+side*.74,-1.78+j*.18,4.04),.10,.51,"Amethyst",(.2,side*.85,0))
+
+
+def create_environment_details(ctx):
+    ctx.group("BotanicalDetails");rng=random.Random(ctx.cfg.seed+812);tufts=0;flowers=0;cliffs=0
+    # Small geometry at path edges makes natural transitions without covering the lanes.
+    for attempt in range(6500):
+        if tufts>=650:break
+        p=(rng.uniform(-94,94),rng.uniform(-94,94))
+        if min(route_distance(p,r) for r in ctx.lanes.values())<6.1:continue
+        if route_distance(p,ctx.river)<5.2:continue
+        if any(math.dist(p,c)<10.6 for c in CLEARINGS.values()):continue
+        if any(math.dist(p,c)<15.5 for c in list(BASES.values())+list(BOSSES.values())):continue
+        if any(math.dist(p,c)<3.4 for _,_,c in CAMPS):continue
+        path=min(route_distance(p,r) for r in ctx.paths)
+        if path<2.05:continue
+        if path>6 and rng.random()<.7:continue
+        z=ctx.height(*p);verts=[];faces=[]
+        for j in range(7):
+            a=j*2.39996+attempt;r=rng.uniform(.05,.34);h=rng.uniform(.23,.62);w=.045
+            x=p[0]+math.cos(a)*r;y=p[1]+math.sin(a)*r;k=len(verts)
+            verts.extend([(x-math.sin(a)*w,y+math.cos(a)*w,z),(x+math.sin(a)*w,y-math.cos(a)*w,z),(x+math.cos(a)*.16,y+math.sin(a)*.16,z+h)]);faces.append((k,k+1,k+2))
+        ctx.mesh("Path edge hand painted grass tuft",verts,faces,"GrassBlade");tufts+=1
+        if tufts%15==0:
+            for j in range(3):
+                q=(p[0]+j*.20,p[1]+j*.15,z+.28+j*.08)
+                ctx.limb("Wildflower stalk",(q[0],q[1],z),q,.013,.009,"GrassBlade",5)
+                for k in range(4):
+                    a=k*PI/2;ctx.sphere("Woodland flower petal",(q[0]+math.cos(a)*.075,q[1]+math.sin(a)*.075,q[2]),(.08,.06,.035),"FlowerBlue" if tufts%30 else "FlowerCream",1)
+            flowers+=1
+    # Exposed jungle strata only on elevated ground, outside all protected routes.
+    for i in range(1000):
+        if cliffs>=34:break
+        p=(rng.uniform(-58,58),rng.uniform(-58,58));h=ctx.height(*p)
+        if h<2.6 or not ctx.clear_for_foliage(p,.35):continue
+        if any(math.dist(p,q)<2.0 for q in ctx.registry["trees"]):continue
+        create_rock(ctx,"Exposed mossy jungle terrace",(*p,h-.55),(1.45,1.05,1.7),seed=i)
+        ctx.sphere("Jungle cliff painted moss",(p[0]-.2,p[1],h+.54),(1.02,.75,.15),"Moss",1);cliffs+=1
+    # A scattering of natural stones/reeds is not a continuous bank wall.
+    ctx.group("Riverbanks");samples=path_samples(ctx.river,5.5)
+    for i,p in enumerate(samples[2:-2]):
+        if any(math.dist(p,q)<11 for _,q in STONE_BRIDGES+ENERGY_BRIDGES):continue
+        a=samples[max(0,i+1)];b=samples[min(len(samples)-1,i+3)];d=(Vector(b)-Vector(a)).normalized();normal=Vector((-d.y,d.x))
+        side=-1 if i%2 else 1;q=Vector(p)+normal*side*5.55
+        if min(route_distance(q,r) for r in ctx.lanes.values())<6.2:continue
+        z=ctx.height(*q)
+        ctx.sphere("Riverbank softened moss stone",(q.x,q.y,z+.12),(.60,.44,.30),"Stone",1)
+        for j in range(3):create_detail_leaf(ctx,"Riverbank bright folded reed",(q.x+j*.12,q.y,z),(q.x+.1+j*.12,q.y+.28,z+.65+j*.1),.11,"Bush")
+    print("POLISH DETAILS",tufts,"grass clumps",flowers,"flower clusters",cliffs,"jungle strata",flush=True)
 
 
 def build_map(config):
@@ -1146,7 +1304,7 @@ def build_map(config):
     create_monster(ctx,"NightLeviathan",(75,-75,.76),1.65,True)
     for i,kind,p in CAMPS:create_camp(ctx,i,kind,p)
     for i,(p,toward) in enumerate(CRYSTAL_GATES,1):create_crystal_gate(ctx,i,p,toward)
-    create_forest(ctx);create_cliffs_and_waterfalls(ctx);create_lighting_and_camera(ctx)
+    create_forest(ctx);create_environment_details(ctx);create_cliffs_and_waterfalls(ctx);create_lighting_and_camera(ctx)
     validation=validate_scene(ctx);export_layout(ctx,validation)
     scene=ctx.scene;scene.frame_set(1)
     # Пакуем найденный системный шрифт. Процедурным материалам нечего искать на диске.
