@@ -1,9 +1,10 @@
 PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, eight gates and five bridges
-PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 443 meshes 2815790 vertices 1605098 triangles
-PASS 265 actor transforms, particle tracks and axis conversion
+PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 716 meshes 3537791 vertices 2048620 triangles
+PASS 310 actor transforms, particle tracks and axis conversion
 PASS all eight crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
 PASS descriptions, DOM bindings, local links, shader injection targets and source archive
 PASS four exported image textures, ten physical hero roots at Y=0 and fountain metadata
+PASS preserved Blender hierarchy, six minion models, twenty joints and 26 neutral roots
 VALLEY200 CPU CHECKS PASSED; WebGL rendering/browser interaction not executed.
 
 PASS exact bridge schedule: closed 0–120, Dawn 120–240, Dusk 240–360, alternating; warning at 15 seconds
@@ -12,4 +13,18 @@ PASS all 8 shortcuts: 24 HP, six melee hits / eight ranged projectiles, cooldown
 PASS allied fountain HP/mana restoration, enemy exclusion, trigger radius and maximum clamping
 PASS four closure cases: ten heroes, nearest shore, smooth protected ejection, no bridge damage and Y=0 throughout
 PASS planar projectiles, enemy hero damage and respawn at the fountain
-GAMEPLAY 200.3 CHECKS PASSED; local simulation only, browser/WebGL/network match not executed.
+GAMEPLAY 200.4 CHECKS PASSED; local simulation only, browser/WebGL/network match not executed.
+
+PASS exact catalog: 22 forest + 2 rift + 2 bosses, spawn boundaries 0:20, 1:00, 3:00 and 7:00
+PASS 65-second group respawn after last wolf, synchronized restoration, 90-second rift respawn
+PASS simultaneous six lane groups at 0:10, 25-second cadence, every third siege and siege in every wave after 10:00
+PASS real Colossus death: two team-wide waves, +15% HP, +10% building damage, unmodified unit damage; 180/240-second boss respawn
+PASS target priority minion → building → hero, no neutral targeting, no movement toward escaped heroes
+PASS defensive 2-second aggro and immediate lane/range restriction
+PASS siege building hits, tower counterfire, planar projectiles and 1.5-second death lifetime
+PASS two-minute integration: lane encounters and structures damaged, all units stay on their fixed lane and Y=0
+COMBAT 200.4 CHECKS PASSED; browser rendering not executed.
+
+PASS actual Blender minion meshes: six templates, joints, walk/attack poses, four wheel rotations, cannon recoil and caster hover
+PASS 1.5-second death visibility, eight fragments, isolated fading materials, cleanup and CPU ray picking
+ANIMATION CPU 200.4 CHECKS PASSED; no browser/WebGL render executed.

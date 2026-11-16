@@ -1,5 +1,5 @@
 // Planar map simulation. Every logical hero/projectile is (x, 0, z); render elevation is separate.
-import {MapState} from './model.mjs?v=200.3';
+import {MapState} from './model.mjs?v=200.4';
 export const RULES=Object.freeze({hz:30,heroRadius:.6,heroSpeed:8,heroHealth:1200,heroMana:500,fountainRadius:6.6,healHP:300,healMana:180,bridgeStart:120,bridgePeriod:120,bridgeWarning:15,ejectDuration:.65,crystalHP:24,meleeCrystalDamage:4,rangedCrystalDamage:3,crystalRespawn:60,meleeRange:3.2,rangedRange:9,attackPeriod:.55,projectileSpeed:22});
 const SQRT2=Math.SQRT2,EPS=1e-7;
 export const xy=p=>({x:p.X??p[0],y:0,z:-(p.Y??p[1])});
@@ -15,7 +15,7 @@ export class PlanarNavigation{
   this.lanes=Object.values(layout.lanes).map(r=>r.map(xy));this.arenas=Object.values(layout.bosses).map(xy);this.bases=Object.values(layout.bases).map(xy);this.fountains=Object.values(layout.fountains).map(xy);this.camps=layout.camps.map(c=>xy(c.position));this.clearings=Object.values(layout.clearings).map(xy);
   this.paths=layout.forest_paths.map(r=>({points:r.map(xy),half:1.75}));this.paths.push(...layout.tower_passages.map(r=>({points:r.points.map(xy),half:1.8})),...layout.boss_approaches.map(r=>({points:r.points.map(xy),half:4})),...layout.crystals.map(c=>({points:c.short_path.map(xy),half:1.75})));
   for(const team of ['Light','Dark'])this.paths.push({points:[xy(layout.bases[team]),xy(layout.fountains[team])],half:3});
-  this.river=layout.river.map(xy);this.riverHalf=layout.river_half_width;this.bridges=layout.energy_bridges.map(b=>xy(b.position));this.stone=layout.stone_bridges.map(b=>xy(b.position));this.towers=entities.filter(e=>e.category==='tower').map(e=>xy(e.position));
+  this.river=layout.river.map(xy);this.riverHalf=layout.river_half_width;this.bridges=layout.energy_bridges.map(b=>xy(b.position));this.stone=layout.stone_bridges.map(b=>xy(b.position));this.towers=entities.filter(e=>e.category==='tower').map(e=>({...xy(e.position),id:e.id}));
   this.gates=entities.filter(e=>e.category==='crystal_gate').map(e=>({id:e.id,p:xy(e.position)}));this.trees=layout.trees.map(xy);this.rects=(layout.colliders??[]).map(r=>({minX:r.min[0],maxX:r.max[0],minZ:-r.max[1],maxZ:-r.min[1]}));
   this.mask=new Uint8Array(this.count*this.count);this.riverMask=new Uint8Array(this.mask.length);for(let z=0;z<this.count;z++)for(let x=0;x<this.count;x++){const p=this.point(z*this.count+x);this.mask[z*this.count+x]=this.staticWalkable(p)?1:0;this.riverMask[z*this.count+x]=this.isRiver(p)?1:0;}
  }
@@ -28,7 +28,7 @@ export class PlanarNavigation{
  staticWalkable(p){const r=RULES.heroRadius;
   const inside=this.inArena(p)||this.bases.some(q=>dist(p,q)<=15.1-r)||this.fountains.some(q=>dist(p,q)<=7-r)||this.clearings.some(q=>dist(p,q)<=10.6-r)||this.camps.some(q=>dist(p,q)<=5.45-r)||this.lanes.some(q=>routeDistance(p,q)<=5.2-r)||this.paths.some(q=>routeDistance(p,q.points)<=q.half-r)||this.bridges.some((_,i)=>this.onBridge(p,i))||this.onStone(p);
   if(!inside)return false;
-  if(this.towers.some(q=>dist(p,q)<2.65+r)||this.bases.some(q=>dist(p,q)<3.1+r))return false;
+  if(this.towers.some(q=>(!this.state.structures||this.state.structures.get(q.id)?.alive!==false)&&dist(p,q)<2.65+r)||this.bases.some(q=>dist(p,q)<3.1+r))return false;
   if(this.trees.some(q=>dist(p,q)<.35+r))return false;
   if(this.rects.some(q=>p.x>q.minX-r&&p.x<q.maxX+r&&p.z>q.minZ-r&&p.z<q.maxZ+r))return false;
   return true;
@@ -82,7 +82,7 @@ export class PlanarWorld extends MapState{
    h.position.y=0;
    for(const f of this.fountains)if(f.team===h.team&&dist(h.position,f.position)<=f.radius){h.health=Math.min(h.maxHealth,h.health+RULES.healHP*dt);h.mana=Math.min(h.maxMana,h.mana+RULES.healMana*dt);}
   }
-  for(let i=this.projectiles.length-1;i>=0;i--){const p=this.projectiles[i],target=p.targetKind==='hero'?this.heroById.get(p.target):null,e=this.entities.get(p.target),point=target?.position??(e?xy(e.position):null);if(!point||target&&!target.alive){this.projectiles.splice(i,1);continue;}const d=dist(p.position,point);if(d<=p.speed*dt+.1){if(p.targetKind==='crystal')this.damageGate(p.target,p.damage);else{target.health=Math.max(0,target.health-p.damage);if(target.health===0){target.alive=false;target.respawnAt=this.time+12;target.path=[];target.ejection=null;}}this.projectiles.splice(i,1);}else p.position=lerp(p.position,point,p.speed*dt/d);p.position.y=0;}
+  for(let i=this.projectiles.length-1;i>=0;i--){const p=this.projectiles[i],target=p.targetKind==='hero'?this.heroById.get(p.target):null,e=this.entities.get(p.target),point=target?.position??(e?xy(e.position):null);if(!point||target&&!target.alive){this.projectiles.splice(i,1);continue;}const d=dist(p.position,point);if(d<=p.speed*dt+.1){if(p.targetKind==='crystal')this.damageGate(p.target,p.damage);else{target.health=Math.max(0,target.health-p.damage);this.onHeroDamaged?.(p.source,target);if(target.health===0){target.alive=false;target.respawnAt=this.time+12;target.path=[];target.ejection=null;}}this.projectiles.splice(i,1);}else p.position=lerp(p.position,point,p.speed*dt/d);p.position.y=0;}
   for(const [id,c]of this.crystals)if(c.hp===0&&this.time-c.brokenAt>=RULES.crystalRespawn-EPS)this.restore(id);
  }
  eject(hero,index){const b=this.nav.bridges[index],axis={x:1/SQRT2,z:-1/SQRT2},choices=[];for(const side of [-1,1]){const p={x:b.x+axis.x*side*12.6,y:0,z:b.z+axis.z*side*12.6},safe=this.nav.nearest(p,5);if(safe&&!this.nav.isRiver(safe))choices.push(safe);}if(!choices.length)throw new Error('No safe bank for bridge '+index);choices.sort((a,b)=>dist(a,hero.position)-dist(b,hero.position)||dist(a,hero.spawn)-dist(b,hero.spawn));hero.ejection={from:{...hero.position,y:0},to:choices[0],start:this.time};hero.path=[];hero.goal=null;this.emit('eject','Герой безопасно вытолкнут на берег',{hero:hero.id,bridge:index});}

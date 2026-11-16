@@ -33,4 +33,4 @@ for(let bridge=0;bridge<2;bridge++)for(let side of [-1,1]){w.reset();w.advanceTo
 console.log('PASS four closure cases: ten heroes, nearest shore, smooth protected ejection, no bridge damage and Y=0 throughout');
 w.reset();{const enemy=w.heroes.find(h=>h.team==='Dark');w.player.position={x:-45,y:0,z:10};enemy.position={x:-40,y:0,z:10};assert.ok(w.issue({type:'hero_attack',target:enemy.id}).ok);assert.equal(w.player.mana,475);while(w.projectiles.length){assert.ok(w.projectiles.every(p=>p.position.y===0));w.tick(1/30);}eq(enemy.health,1105);enemy.health=10;w.tick(1);w.issue({type:'hero_attack',target:enemy.id});w.tick(1);assert.equal(enemy.alive,false);w.tick(12);assert.ok(enemy.alive);assert.equal(enemy.position.y,0);}
 console.log('PASS planar projectiles, enemy hero damage and respawn at the fountain');
-console.log('GAMEPLAY 200.3 CHECKS PASSED; local simulation only, browser/WebGL/network match not executed.');
+console.log('GAMEPLAY 200.4 CHECKS PASSED; local simulation only, browser/WebGL/network match not executed.');

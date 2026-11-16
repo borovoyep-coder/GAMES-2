@@ -42,12 +42,12 @@ FOUNTAINS = {"Light": (-89, -89), "Dark": (89, 89)}
 CLEARINGS = {"West": (-45, -10), "North": (15, 45),
              "East": (45, -10), "South": (-15, -45)}
 CAMPS = [
-    (1, "Wolf", (-55, -25)), (2, "Spider", (-55, 15)),
-    (3, "Elemental", (-25, -10)), (4, "Boar", (-40, -45)),
-    (5, "Golem", (0, -50)), (6, "GiantSpider", (30, -45)),
-    (7, "GoldenGolem", (50, 20)), (8, "Wolf", (55, -25)),
-    (9, "ForestSpirit", (25, 0)), (10, "Harpy", (35, 45)),
-    (11, "Bear", (0, 45)), (12, "GiantScorpion", (-25, 45)),
+    (1, "MoonWolf", (-55, -25)), (2, "StoneCentipede", (-55, 15)),
+    (3, "RiftWraith", (-25, -10)), (4, "MagmaGuardian", (-40, -45)),
+    (5, "AzureGolem", (0, -50)), (6, "CrystalCrab", (30, -45)),
+    (7, "MagmaGuardian", (50, 20)), (8, "MoonWolf", (55, -25)),
+    (9, "RiftWraith", (25, 0)), (10, "AzureGolem", (35, 45)),
+    (11, "StoneCentipede", (0, 45)), (12, "CrystalCrab", (-25, 45)),
 ]
 LANE_CONTROL = {
     "Top": [(-75,-75),(-65,-62),(-65,-20),(-65,20),(-65,50),
@@ -115,8 +115,8 @@ class Config:
     output: Path
     seed: int = 1649
     terrain_cells: int = 104
-    tree_count: int = 360
-    bush_count: int = 110
+    tree_count: int = 130
+    bush_count: int = 60
     road_width: float = 10.4
     river_half_width: float = 6.6
     resolution: int = 1440
@@ -1124,7 +1124,7 @@ def create_lighting_and_camera(ctx):
     sun=ctx.object("Warm fantasy sun",data,(0,0,140),rotation=(math.radians(22),math.radians(-26),math.radians(-25)))
     area_data=bpy.data.lights.new(PREFIX+"Blue sky fill","AREA");area_data.energy=18000;area_data.shape="DISK";area_data.size=140;area_data.color=srgb("B5DDF6")
     area=ctx.object("Blue sky fill",area_data,(20,25,110));area.rotation_euler=(Vector((0,0,0))-area.location).to_track_quat('-Z','Y').to_euler()
-    camera_data=bpy.data.cameras.new(PREFIX+"Orthographic 55 degree camera");camera_data.type="ORTHO";camera_data.ortho_scale=267;camera_data.lens=50;camera_data.clip_end=1200
+    camera_data=bpy.data.cameras.new(PREFIX+"Orthographic 55 degree camera");camera_data.type="ORTHO";camera_data.ortho_scale=315;camera_data.lens=50;camera_data.clip_end=1200
     e=math.radians(ctx.cfg.camera_elevation);target=Vector((0,0,-1));position=Vector((0,-340*math.cos(e),340*math.sin(e)))+target
     camera=ctx.object("Main map camera",camera_data,position);camera.rotation_euler=(target-position).to_track_quat('-Z','Y').to_euler();scene.camera=camera
     camera["elevation_degrees"]=ctx.cfg.camera_elevation
@@ -1161,6 +1161,7 @@ def validate_scene(ctx):
                 obj=next(o for o in towers if o["lane"]==lane and o["team"]==team and o["tier"]==tier)
                 assert math.hypot(obj.location.x-x,obj.location.y-y)<1e-6,(lane,team,tier)
     assert len(items("nexus"))==2 and len(items("boss"))==2
+    assert len(items("neutral"))==24 and len(items("minion_template"))==6
     assert len(items("fountain"))==2 and len(items("hero"))==10
     assert all(abs(o.location.z)<1e-8 for o in items("hero"))
     assert len(TOWER_PASSAGES)==18 and len(BOSS_APPROACHES)==4
@@ -1170,7 +1171,7 @@ def validate_scene(ctx):
     ground=items("playable_terrain")[0]
     assert min(v.co.x for v in ground.data.vertices)==-100 and max(v.co.x for v in ground.data.vertices)==100
     assert min(v.co.y for v in ground.data.vertices)==-100 and max(v.co.y for v in ground.data.vertices)==100
-    assert len(items("tree"))>=min(200,ctx.cfg.tree_count),"Insufficient forest; check placement filters"
+    assert len(items("tree"))>=min(130,ctx.cfg.tree_count),"Insufficient forest; check placement filters"
     # Не маскируем недобор густоты леса молчаливым успехом.
     for obj in items("tree"):
         assert all(math.dist(obj.location.xy,p)>11.5 for p in CLEARINGS.values()),"A tree intrudes into a clearing"
@@ -1191,14 +1192,14 @@ def validate_scene(ctx):
 
 def export_layout(ctx,validation):
     def xy(p):return {"X":p[0],"Y":p[1]}
-    data={"name":"Долина Осколков","generator_version":"2.0","seed":ctx.cfg.seed,"coordinate_system":"X/Y ground, Z height","playable_size":200,
+    data={"name":"Долина Осколков","generator_version":"3.0","seed":ctx.cfg.seed,"coordinate_system":"X/Y ground, Z height","playable_size":200,
           "towers":[{"team":team,"lane":lane,"tier":tier,"position":xy((x,y))} for lane,teams in TOWERS.items() for team,entries in teams.items() for tier,x,y in entries],
           "bases":{key:xy(p) for key,p in BASES.items()},"bosses":{key:xy(p) for key,p in BOSSES.items()},
           "clearings":{key:xy(p) for key,p in CLEARINGS.items()},"fountains":{key:xy(p) for key,p in FOUNTAINS.items()},
           "tower_passages":[{"team":t,"lane":lane,"tier":tier,"points":[xy(p) for p in route]} for t,lane,tier,route in TOWER_PASSAGES],
           "boss_approaches":[{"boss":i//2,"points":[xy(p) for p in route],"width":8} for i,route in enumerate(BOSS_APPROACHES)],
           "forest_paths":[[xy(p) for p in route] for route in FOREST_PATHS],
-          "river_half_width":ctx.cfg.river_half_width,"physics_plane_y":0,"colliders":export_colliders(ctx),
+          "river_half_width":ctx.cfg.river_half_width,"neutral_catalog":{"total":26,"forest":22,"rift":2,"bosses":2},"backdrop_trees":ctx.registry["backdrop_tree_count"],"physics_plane_y":0,"colliders":export_colliders(ctx),
           "camps":[{"id":i,"kind":kind,"position":xy(p)} for i,kind,p in CAMPS],
           "river":[xy(p) for p in ctx.river],"lanes":{key:[xy(p) for p in points] for key,points in ctx.lanes.items()},
           "stone_bridges":[{"lane":key,"position":xy(p)} for key,p in STONE_BRIDGES],"energy_bridges":[{"kind":key,"position":xy(p)} for key,p in ENERGY_BRIDGES],
@@ -1443,10 +1444,243 @@ def export_colliders(ctx):
     return result
 
 
+# -----------------------------------------------------------------------------
+# 3.0: 26 authored neutrals, articulated minion templates and open playable forest.
+# -----------------------------------------------------------------------------
+CAMP_RULES={'MagmaGuardian':(1,100),'AzureGolem':(1,100),'MoonWolf':(3,65),'StoneCentipede':(2,75),'RiftWraith':(3,65),'CrystalCrab':(1,75)}
+RIFT_SPAWNS=[('Watcher',(-15,15)),('RiftRay',(15,-15))]
+_old_leviathan=create_leviathan
+_old_bush=create_bush
+_old_tree=create_tree
+
+def create_combat_materials(ctx):
+    for name,dark,light,emission in [('Emerald','176548','78DC73',0),('MintLeaf','4C9639','C3F17B',0),('MagmaCore','AD1207','FF6B2A',2.3),('RiftMist','343A88','8786FF',.65),('ObsidianScale','0B0B21','352546',0),('BlueArmor','123B83','318FEB',0),('RedArmor','6D0B22','D53B50',0)]:painted_material(ctx,name,dark,light,roughness=.6,emission=emission,alpha=.65 if name=='RiftMist' else 1)
+
+
+def rematerial_descendants(root,mapping):
+    for obj in root.children_recursive:
+        if obj.type!='MESH':continue
+        if not any(m.name.removeprefix(PREFIX) in mapping for m in obj.data.materials):continue
+        obj.data=obj.data.copy()
+        for i,m in enumerate(obj.data.materials):
+            key=m.name.removeprefix(PREFIX)
+            if key in mapping:obj.data.materials[i]=mapping[key]
+
+
+def create_magma_guardian(ctx):
+    root=ctx.parent;create_golem(ctx)
+    rematerial_descendants(root,{'BlueHide':ctx.materials['StoneDark'],'BlueCrystal':ctx.materials['MagmaCore'],'Stone':ctx.materials['Bronze']})
+    for j in range(7):
+        a=j*2.39996;ctx.crystal('Magma glowing fissure crystal',(math.cos(a)*1.1,math.sin(a)*.7,2.1+j%3*.5),.20,.9,'MagmaCore',(.2,.4,a))
+
+
+def create_azure_golem(ctx):
+    create_golem(ctx)
+    for side in [-1,1]:
+        ctx.crystal('Azure shoulder crystalline crest',(side*1.6,0,4.0),.27,1.1,'BlueCrystal')
+        ctx.curve('Azure ancient luminous rune',[(side*.8,-.80,2.2),(side*.5,-.96,2.55),(side*.9,-.80,2.85)],.045,'BlueCrystal')
+
+
+def create_centipede(ctx):
+    for j in range(8):
+        y=(j-3.5)*.6;z=.72+math.sin(j*.5)*.1
+        ctx.sphere('Centipede carved stone carapace',(math.sin(j*.6)*.13,y,z),(1.0-j*.035,.47,.55),'Stone',2)
+        ctx.crystal('Centipede emerald dorsal crystal',(0,y,z+.43),.18,.65,'Emerald')
+        for side in [-1,1]:
+            ctx.limb('Centipede jointed walking leg',(side*.7,y,z),(side*1.3,y-.10,.42),.12,.075,'StoneDark',8)
+            ctx.limb('Centipede pointed foot',(side*1.3,y-.1,.42),(side*1.65,y-.3,.05),.075,.012,'Emerald',8)
+    for side in [-1,1]:
+        ctx.sphere('Centipede emerald eye',(side*.43,-2.48,.89),(.12,.10,.11),'Emerald',1)
+        ctx.curve('Centipede curved ivory mandible',[(side*.55,-2.4,.61),(side*.8,-2.9,.45),(side*.32,-3.05,.45)],.095,'Ivory')
+
+
+def create_wraith(ctx):
+    ctx.loft('Wraith tapered floating veil',[(0,.25,.45,.04,.04),(0,.10,.9,.6,.45),(0,0,1.8,.75,.5),(0,0,2.25,.45,.35)],'RiftMist',16)
+    ctx.sphere('Wraith shadowed face',(0,-.25,2.18),(.43,.33,.50),'Obsidian',2)
+    for side in [-1,1]:
+        ctx.sphere('Wraith luminous violet eye',(side*.17,-.56,2.27),(.09,.04,.10),'Amethyst',1)
+        ctx.sphere('Wraith floating armored shoulder',(side*.88,0,1.97),(.35,.43,.35),'StoneDark',1)
+        ctx.crystal('Wraith orbiting broken armor',(side*.78,-.1,1.2),.21,.86,'Amethyst',(0,side*.5,0))
+    ctx.ring('Wraith levitation aura',(0,0,.40),.95,.04,'Amethyst')
+
+
+def create_crab(ctx):
+    ctx.sphere('Crab massive golden faceted shell',(0,0,1.05),(1.6,1.15,.86),'Gold',2)
+    ctx.sphere('Crab lower obsidian armor',(0,0,.75),(1.35,1.02,.56),'Obsidian',2)
+    for j in range(7):
+        a=j*2.39996;ctx.crystal('Crab royal amethyst carapace',(math.cos(a)*.9,math.sin(a)*.6,1.55),.24,.85,'Amethyst',(.1,.2,a))
+    for side in [-1,1]:
+        for j in range(3):
+            a=(side*.9,-.7+j*.7,.9);b=(side*2.05,-.9+j*.8,.7);c=(side*2.5,-1.0+j*.9,.05)
+            ctx.limb('Crab golden jointed leg',a,b,.15,.10,'Gold');ctx.limb('Crab claw foot',b,c,.10,.015,'Obsidian')
+        ctx.curve('Crab massive claw arm',[(side*1.1,-.6,1),(side*1.9,-1.6,1.1),(side*2.1,-2.1,1.5)],.25,'Gold')
+        for f in [-1,1]:ctx.curve('Crab articulated amethyst pincer',[(side*2.1,-2.1,1.5),(side*2.1+f*.5,-2.55,1.7),(side*2.1+f*.18,-2.95,1.7)],.18,'Amethyst')
+        ctx.limb('Crab raised eye stalk',(side*.55,-.75,1.5),(side*.7,-1.35,2.12),.10,.07,'Gold');ctx.sphere('Crab curious violet eye',(side*.7,-1.4,2.13),(.18,.14,.18),'Amethyst',2)
+
+
+def create_watcher(ctx):
+    ctx.sphere('Watcher floating azure spirit',(0,0,1.6),(.93,.6,.95),'BlueCrystal',2)
+    ctx.sphere('Watcher giant white eye',(0,-.55,1.85),(.66,.14,.62),'Ivory',2)
+    ctx.sphere('Watcher blue iris',(0,-.71,1.86),(.34,.07,.35),'BlueHide',2);ctx.sphere('Watcher deep pupil',(0,-.78,1.86),(.17,.04,.22),'Obsidian',2)
+    for side in [-1,1]:ctx.curve('Watcher ethereal trailing fin',[(side*.6,0,1.6),(side*1.45,.25,2.15),(side*1.8,.55,1.5),(side*.9,.8,.8)],.13,'RiftMist')
+    ctx.ring('Watcher luminous orbit',(0,0,.65),1.25,.035,'BlueCrystal')
+
+
+def create_rift_ray(ctx):
+    ctx.sphere('Rift ray translucent body',(0,0,1.4),(.65,1.3,.32),'RiftMist',2)
+    for side in [-1,1]:
+        vertices=[(0,-1.1,1.45),(side*.6,-.8,1.55),(side*2.6,.1,1.3),(side*1.7,.7,1.04),(side*.5,1.25,1.4),(0,.7,1.4)]
+        ctx.mesh('Rift ray broad spectral wing',vertices,[(0,1,2,3,4,5)],'RiftMist',smooth_faces=True)
+        ctx.curve('Rift ray luminous wing edge',vertices[1:5],.045,'Amethyst')
+        ctx.sphere('Rift ray sapphire eye',(side*.27,-.95,1.6),(.10,.12,.08),'BlueCrystal',1)
+    ctx.curve('Rift ray long curling tail',[(0,.7,1.4),(0,2.0,1.3),(.4,3.1,1.6),(.7,3.8,1.9)],.11,'RiftMist')
+
+
+def create_leviathan(ctx):
+    root=ctx.parent;_old_leviathan(ctx)
+    rematerial_descendants(root,{'PurpleHide':ctx.materials['ObsidianScale'],'Petal':ctx.materials['RiftMist']})
+    for j in range(9):
+        a=j*2*PI/9;ctx.crystal('Leviathan orbiting amethyst satellite',(math.cos(a)*4.8,math.sin(a)*4.8,2.5+math.sin(a*2)),.27,1.3,'Amethyst',(.2,.4,a))
+    for r in [4.7,5.4]:ctx.ring('Leviathan royal purple aura',(0,0,.3),r,.055,'Amethyst')
+
+MONSTER_BUILDERS.update({'MagmaGuardian':create_magma_guardian,'AzureGolem':create_azure_golem,'MoonWolf':create_wolf,'StoneCentipede':create_centipede,'RiftWraith':create_wraith,'CrystalCrab':create_crab,'Watcher':create_watcher,'RiftRay':create_rift_ray,'NightLeviathan':create_leviathan})
+
+def create_camp(ctx,index,kind,position):
+    ctx.group('MonsterCamps');count,respawn=CAMP_RULES[kind]
+    with ctx.root(f'Camp {index:02d}',(*position,.10),'camp') as root:
+        root['camp_index']=index;root['monster_kind']=kind;root['side']='Light' if index<=6 else 'Dark';root['spawn_seconds']=20;root['respawn_seconds']=respawn;root['member_count']=count
+        ctx.cylinder('Camp natural clearing',(0,0,-.01),5.45,.10,'Earth',48,.02)
+        for j in range(10):
+            a=j*2*PI/10;ctx.sphere('Camp edge mossy pebble',(5.35*math.cos(a),5.35*math.sin(a),.12),(.30,.26,.20),'Moss',1)
+        for j in range(count):
+            p=(0,0,.10) if count==1 else ((j-(count-1)/2)*2.7,0 if j==0 else .6,.10)
+            scale={'MoonWolf':.85,'StoneCentipede':.85,'RiftWraith':1.15,'CrystalCrab':1.1,'MagmaGuardian':1.0,'AzureGolem':1.0}[kind]*(1 if j==0 else .68)
+            with ctx.root(kind,p,'neutral',scale=scale) as creature:
+                creature['monster_kind']=kind;creature['camp_index']=index;creature['member_index']=j;creature['spawn_seconds']=20;creature['respawn_seconds']=respawn;creature['side']=root['side'];creature['leader']=j==0
+                MONSTER_BUILDERS[kind](ctx)
+                if kind=='MoonWolf':
+                    for k in range(4):ctx.crystal('Moon wolf blue dorsal crystal',(0,-.3+k*.45,2.25),.16,.7,'BlueCrystal',(.1,0,0))
+        return root
+
+
+def create_rift_neutrals(ctx):
+    ctx.group('RiftCreatures')
+    for kind,p in RIFT_SPAWNS:
+        with ctx.root(kind,(*p,0),'neutral') as root:
+            root['monster_kind']=kind;root['camp_index']=0;root['member_index']=0;root['spawn_seconds']=60;root['respawn_seconds']=90;MONSTER_BUILDERS[kind](ctx)
+    for root in [o for o in ctx.scene.objects if o.get('category')=='boss']:
+        solar=root['monster_kind']=='SolarColossus';root['spawn_seconds']=180 if solar else 420;root['respawn_seconds']=180 if solar else 240
+
+
+def create_bush(ctx,position,scale=1,variant=0):
+    with ctx.root('Volumetric ambush thicket',position,'bush',scale=scale) as root:
+        root['concealment_zone']=True;root['radius']=2.0*scale
+        for j in range(7):
+            a=j*2.39996;r=.2 if j==0 else .95;ctx.sphere('Bush plump emerald leaf crown',(math.cos(a)*r,math.sin(a)*r,.75+(j%3)*.18),(.95,.78,.85),'MintLeaf' if j%3 else 'Emerald',2)
+        for j in range(18):
+            a=j*2.39996;ctx.crystal('Bush folded sunlit leaf',(math.cos(a)*1.2,math.sin(a)*1.2,.95),.17,.7,'MintLeaf',(math.sin(a)*.5,math.cos(a)*.5,a))
+        return root
+
+
+def create_forest(ctx):
+    ctx.group('Ruins');ruins=[]
+    for ci,center in enumerate(CLEARINGS.values()):
+        for j in range(8):
+            a=j*PI/4+.19;p=(center[0]+14.2*math.cos(a),center[1]+14.2*math.sin(a))
+            if not ctx.clear_for_foliage(p,.1):continue
+            if any(min(route_distance((p[0]+math.cos(a+PI/2)*off,p[1]+math.sin(a+PI/2)*off),r) for r in ctx.paths)<2.8 for off in [-2.8,0,2.8]):continue
+            create_wall(ctx,'Forest clearing wall',(*p,ctx.height(*p)),4.4,a+PI/2,(j+ci)%2==0);ruins.append(p)
+    ctx.group('Forest');positions=[];attempts=0
+    while len(positions)<ctx.cfg.tree_count and attempts<35000:
+        attempts+=1;p=(ctx.rng.uniform(-94,94),ctx.rng.uniform(-94,94))
+        if not ctx.clear_for_foliage(p,1.2) or any(math.dist(p,q)<7.4 for q in positions) or any(math.dist(p,q)<4.7 for q in ruins):continue
+        positions.append(p);o=create_tree(ctx,(*p,0),ctx.rng.uniform(5.8,7.0),len(positions)%23);o.scale.x*=1.12;o.scale.y*=1.12
+    bushes=[]
+    # Readable river entrances, lane corners and camp mouths; kept off the walking centreline.
+    candidates=[(-42,27),(-23,39),(22,-40),(42,-24),(-54,49),(-38,58),(56,38),(45,-57),(-58,-38),(-33,-49),(53,-42),(-13,-22),(13,23)]
+    for _,_,c in CAMPS:
+        candidates.extend([(c[0]-4.5,c[1]+4.5),(c[0]+4.5,c[1]+4.5)])
+    candidates += [(c[0]+12*math.cos(j*2.39996),c[1]+12*math.sin(j*2.39996)) for c in CLEARINGS.values() for j in range(10)]
+    for p in candidates:
+        if len(bushes)>=ctx.cfg.bush_count:break
+        if min(route_distance(p,r) for r in ctx.lanes.values())<5.4 or route_distance(p,ctx.river)<7.5:continue
+        if any(math.dist(p,c)<2.8 for c,_ in CRYSTAL_GATES) or any(math.dist(p,c)<3.4 for c in bushes):continue
+        if any(math.dist(p,c)<11 for c in CLEARINGS.values()):continue
+        bushes.append(p);create_bush(ctx,(*p,0),1.05+len(bushes)%3*.12,len(bushes)%17)
+    ctx.registry['trees']=positions;ctx.registry['bushes']=bushes
+    print('OPEN FOREST',len(positions),'playable trees;',len(bushes),'volumetric ambush bushes',flush=True)
+
+
+def create_outer_landscape(ctx):
+    rng=random.Random(ctx.cfg.seed+440);ctx.group('OuterLandscape');count=0
+    for side in range(4):
+        for j in range(10):
+            t=-112+j*224/9;depth=119+(j%3)*5
+            x,y=(t,-depth) if side==0 else (depth,t) if side==1 else (t,depth) if side==2 else (-depth,t)
+            if any(math.dist((x,y),q)<18 for q in [(-116,43),(-116,-41),(-35,-118),(47,-118),(118,-53),(118,49)]):continue
+            cap=-2.0+(y-x)/220*2.0;create_rock(ctx,'Outer forest stepped crag',(x,y,cap-9.2),(14.5,13.0,13),seed=j+side*47)
+            outward=Vector((x,y)).normalized()*5.5
+            create_rock(ctx,'Outer continuous lower forest shelf',(x+outward.x,y+outward.y,cap-14.5),(16,13,12),seed=400+j+side*47)
+            for k in range(7):
+                a=k*2.39996;px=x+math.cos(a)*rng.uniform(1,7.5);py=y+math.sin(a)*rng.uniform(1,7.5)
+                if k%3:
+                    o=create_tree(ctx,(px,py,cap),rng.uniform(8,12),j*4+k);o['category']='backdrop_tree'
+                else:
+                    with ctx.root('Outer broadleaf elder',(px,py,cap),'backdrop_tree'):
+                        ctx.limb('Deciduous twisting trunk',(0,0,0),(.25,0,5),.45,.18,'Wood')
+                        for q in range(7):
+                            a=q*2.39996;ctx.sphere('Deciduous layered emerald crown',(math.cos(a)*1.5,math.sin(a)*1.5,5+q%3*.7),(2.0,1.8,1.9),'Emerald' if q%2 else 'PineLight',2)
+                count+=1
+            if j%4==1:
+                create_ruin_arch(ctx,(x,y,cap),j*.7)
+    ctx.registry['backdrop_tree_count']=count
+
+
+def minion_cylinder(ctx,*args,rotation=(0,0,0)):
+    obj=ctx.cylinder(*args);obj.rotation_euler=rotation;return obj
+
+
+def create_minion_template(ctx,team,kind):
+    ctx.group('MinionTemplates');ctx.collection.hide_render=True
+    armor='BlueArmor' if team=='Light' else 'RedArmor';glow='BlueCrystal' if team=='Light' else 'RedCrystal'
+    with ctx.root(f'Minion template {team} {kind}',(0,0,0),'minion_template') as root:
+        root['template_key']=team+'_'+kind;root['team']=team;root['minion_kind']=kind;root['physics_y']=0
+        def part(name,p):
+            return ctx.root('Minion articulated '+name,p)
+        if kind=='Guard':
+            ctx.loft('Guard sturdy stone cuirass',[(0,0,.65,.44,.32),(0,0,1.45,.6,.4),(0,0,1.7,.45,.32)],armor,12,.05)
+            ctx.sphere('Guard crowned helmet',(0,0,1.96),(.43,.37,.43),'Gold',2);ctx.box('Guard inset helmet visor',(0,-.36,1.98),(.48,.08,.15),'Obsidian',.025);ctx.crystal('Guard helmet glowing crest',(0,0,2.28),.17,.59,glow)
+            for side in [-1,1]:
+                with part('leg_left' if side<0 else 'leg_right',(side*.25,0,.75)) as o:
+                    o['minion_part']='leg_left' if side<0 else 'leg_right';ctx.limb('Guard segmented shin',(0,0,0),(0,0,-.5),.19,.15,armor);ctx.box('Guard golden sabaton',(0,-.13,-.53),(.42,.6,.30),'Gold',.06)
+            with part('shield',(-.74,-.12,1.3)) as o:
+                o['minion_part']='shield';ctx.box('Guard enormous tower shield',(0,-.14,-.1),(.95,.25,1.6),'Gold',.12);ctx.box('Guard embossed shield face',(0,-.29,-.1),(.77,.09,1.38),armor,.10);ctx.crystal('Guard shield central jewel',(0,-.38,-.25),.17,.65,glow)
+            with part('blade',(.65,0,1.38)) as o:
+                o['minion_part']='blade';ctx.limb('Guard armored striking arm',(0,0,0),(.08,-.18,-.35),.17,.14,armor);ctx.box('Guard energy blade crossguard',(.08,-.18,-.15),(.50,.13,.10),'Gold',.02);ctx.crystal('Guard long luminous energy blade',(.08,-.18,-.12),.10,1.35,glow)
+        elif kind=='Caster':
+            ctx.loft('Caster floating embroidered cloak',[(0,.1,.38,.77,.59),(0,0,.8,.58,.42),(0,0,1.7,.38,.31)],armor,16,.025)
+            ctx.loft('Caster pointed mage hood',[(0,0,1.55,.52,.44),(0,0,2.0,.45,.39),(0,.2,2.9,.02,.02)],armor,12)
+            ctx.sphere('Caster shadowed hood interior',(0,-.37,1.96),(.30,.12,.32),'Obsidian',2)
+            for side in [-1,1]:ctx.sphere('Caster glowing eye',(side*.12,-.49,2.01),(.07,.035,.08),glow,1)
+            for j in range(5):ctx.crystal('Caster cloak crystalline stitch',((j-2)*.22,-.4,.66),.085,.38,glow)
+            with part('staff',(.78,-.02,1.3)) as o:
+                o['minion_part']='staff';ctx.limb('Caster golden staff shaft',(0,0,-.9),(0,0,1.0),.065,.065,'Gold');ctx.ring('Caster open staff halo',(0,0,1.0),.32,.055,'Gold').rotation_euler=(PI/2,0,0);ctx.crystal('Caster levitating staff crystal',(0,0,.86),.20,.74,glow)
+        else:
+            ctx.box('Siege massive stone gun carriage',(0,0,.75),(1.7,2.6,.72),armor,.14);ctx.box('Siege golden reinforced rail',(0,0,1.2),(1.5,2.4,.21),'Gold',.06)
+            for side in [-1,1]:
+                for axle in [-1,1]:
+                    with part(f'wheel_{side}_{axle}',(side*1.03,axle*.88,.55)) as o:
+                        o['minion_part']='wheel';minion_cylinder(ctx,'Siege carved golden wheel',(0,0,0),.54,.26,'Gold',16,rotation=(0,PI/2,0));minion_cylinder(ctx,'Siege crystal wheel hub',(side*.16,0,0),.19,.08,glow,12,rotation=(0,PI/2,0))
+            with part('cannon',(0,0,1.52)) as o:
+                o['minion_part']='cannon';minion_cylinder(ctx,'Siege reinforced cannon barrel',(0,-.4,0),.45,2.25,'Gold',16,rotation=(PI/2,0,0));minion_cylinder(ctx,'Siege obsidian muzzle bore',(0,-1.57,0),.34,.04,'Obsidian',16,rotation=(PI/2,0,0));ctx.crystal('Siege enormous charged cannon crystal',(0,-1.1,-.1),.23,.8,glow,(PI/2,0,0))
+            for side in [-1,1]:ctx.crystal('Siege side energy reservoir',(side*.55,.65,1.23),.17,.75,glow)
+        return root
+
+
 def build_map(config):
     if bpy.app.version<(4,0,0):raise RuntimeError("Blender 4.0 or newer is required")
     config.output.mkdir(parents=True,exist_ok=True);ctx=Context(config)
-    create_materials(ctx);print("MATERIALS READY",flush=True)
+    create_materials(ctx);create_combat_materials(ctx);print("MATERIALS READY",flush=True)
     create_terrain(ctx)
     for name,points in ctx.lanes.items():create_lane(ctx,name,points)
     ctx.group("Trails")
@@ -1466,8 +1700,11 @@ def build_map(config):
     create_monster(ctx,"SolarColossus",(-86,91,.76),2.05,True)
     create_monster(ctx,"NightLeviathan",(86,-86,.76),1.65,True)
     for i,kind,p in CAMPS:create_camp(ctx,i,kind,p)
+    create_rift_neutrals(ctx)
+    for team in ["Light","Dark"]:
+        for kind in ["Guard","Caster","Siege"]:create_minion_template(ctx,team,kind)
     for i,(p,toward) in enumerate(CRYSTAL_GATES,1):create_crystal_gate(ctx,i,p,toward)
-    create_gameplay_geometry(ctx);create_forest(ctx);create_environment_details(ctx);create_cliffs_and_waterfalls(ctx);create_lighting_and_camera(ctx)
+    create_gameplay_geometry(ctx);create_forest(ctx);create_environment_details(ctx);create_cliffs_and_waterfalls(ctx);create_outer_landscape(ctx);create_lighting_and_camera(ctx)
     validation=validate_scene(ctx);export_layout(ctx,validation)
     scene=ctx.scene;scene.frame_set(1)
     # Пакуем найденный системный шрифт. Процедурным материалам нечего искать на диске.
@@ -1503,7 +1740,7 @@ def parse_args():
     parser.add_argument("--out",type=Path,default=default);parser.add_argument("--seed",type=int,default=1649)
     parser.add_argument("--render",action="store_true");parser.add_argument("--detail-renders",action="store_true")
     parser.add_argument("--resolution",type=int,default=1440);parser.add_argument("--samples",type=int,default=32)
-    parser.add_argument("--trees",type=int,default=360);parser.add_argument("--no-labels",action="store_true")
+    parser.add_argument("--trees",type=int,default=130);parser.add_argument("--no-labels",action="store_true")
     args=parser.parse_args(argv)
     if args.trees<0 or args.trees>1000:parser.error("--trees must be between 0 and 1000")
     if args.resolution<320 or args.resolution>8192:parser.error("--resolution must be between 320 and 8192")
