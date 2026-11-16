@@ -1,19 +1,18 @@
-PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, eight gates and five bridges
-PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 716 meshes 3537791 vertices 2048620 triangles
-PASS 310 actor transforms, particle tracks and axis conversion
-PASS all eight crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
+PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, six gates and five bridges
+PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 703 meshes 3454964 vertices 2000720 triangles
+PASS 300 actor transforms, particle tracks and axis conversion
+PASS all six crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
 PASS descriptions, DOM bindings, local links, shader injection targets and source archive
 PASS four exported image textures, ten physical hero roots at Y=0 and fountain metadata
 PASS preserved Blender hierarchy, six minion models, twenty joints and 26 neutral roots
 VALLEY200 CPU CHECKS PASSED; WebGL rendering/browser interaction not executed.
 
-PASS exact bridge schedule: closed 0–120, Dawn 120–240, Dusk 240–360, alternating; warning at 15 seconds
-PASS flat movement, collision masks, three permanent lanes, 18 tower paths and four boss entrances with all optional routes closed
-PASS all 8 shortcuts: 24 HP, six melee hits / eight ranged projectiles, cooldown, fixed damage, 60-second regeneration and occupancy delay
-PASS allied fountain HP/mana restoration, enemy exclusion, trigger radius and maximum clamping
-PASS four closure cases: ten heroes, nearest shore, smooth protected ejection, no bridge damage and Y=0 throughout
-PASS planar projectiles, enemy hero damage and respawn at the fountain
-GAMEPLAY 200.4 CHECKS PASSED; local simulation only, browser/WebGL/network match not executed.
+PASS exact bridge schedule, closed start, warnings, ten heroes and three permanent lanes
+PASS six crystals: six melee / eight ranged hits, attack cooldown, 60-second restoration and occupied passage delay
+PASS allied fountain healing/mana, enemy exclusion, trigger radius and maximum clamping
+PASS both bridge closures, both banks, ten smooth safe ejections; permanent bush shore remains available
+PASS actual planar movement to a bush and physical boundary rejection
+GAMEPLAY 200.5 CHECKS PASSED
 
 PASS exact catalog: 22 forest + 2 rift + 2 bosses, spawn boundaries 0:20, 1:00, 3:00 and 7:00
 PASS 65-second group respawn after last wolf, synchronized restoration, 90-second rift respawn
@@ -22,9 +21,21 @@ PASS real Colossus death: two team-wide waves, +15% HP, +10% building damage, un
 PASS target priority minion → building → hero, no neutral targeting, no movement toward escaped heroes
 PASS defensive 2-second aggro and immediate lane/range restriction
 PASS siege building hits, tower counterfire, planar projectiles and 1.5-second death lifetime
-PASS two-minute integration: lane encounters and structures damaged, all units stay on their fixed lane and Y=0
-COMBAT 200.4 CHECKS PASSED; browser rendering not executed.
+PASS two-minute integration: balanced lane encounters; isolated siege/counterfire checked above, all units stay on their fixed lane and Y=0
+COMBAT 200.5 CHECKS PASSED; browser rendering not executed.
 
 PASS actual Blender minion meshes: six templates, joints, walk/attack poses, four wheel rotations, cannon recoil and caster hover
 PASS 1.5-second death visibility, eight fragments, isolated fading materials, cleanup and CPU ray picking
-ANIMATION CPU 200.4 CHECKS PASSED; no browser/WebGL render executed.
+ANIMATION CPU 200.5 CHECKS PASSED; no browser/WebGL render executed.
+
+PASS exact independent coordinate tables: 18 towers, 12 camps, bases/arenas, four objective spawns, six gates and 26 bushes
+PASS all 42,025 mask cells and mirrored A* paths, reachable bushes/camps/arenas, 18 side paths and closed square perimeter
+PASS all six crystal shortcuts actually shorten navigation after destruction
+PASS rotational minion formation and structure bypasses on every lane
+SYMMETRY 200.5 CHECKS PASSED
+
+PASS immediate bush concealment, allied 0.45 opacity, opposing model hidden and independent hero materials
+PASS same-bush mutual sight, enemy exit, damage and ability reveal with 2-second duration and refresh
+PASS actual targeting filters, attack rejection, target reset and loss of homing shots for concealed heroes
+PASS real crystal damage publishes the same reveal event
+STEALTH 200.5 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.

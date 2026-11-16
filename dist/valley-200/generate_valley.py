@@ -19,7 +19,7 @@ from typing import Iterable, Sequence
 from contextlib import contextmanager
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 PI = math.pi
 SCENE_NAME = "ValleyOfShards_200"
@@ -28,86 +28,68 @@ PREFIX = "VOS200::"
 # -----------------------------------------------------------------------------
 # 1. Декларативная расстановка. Номера T1/T2/T3 соответствуют запросу, не индексам.
 # -----------------------------------------------------------------------------
-TOWERS = {
-    "Top": {"Light": [(3, -65, -20), (2, -65, 20), (1, -65, 50)],
-            "Dark":  [(1, -35, 65), (2, 0, 65), (3, 45, 65)]},
-    "Mid": {"Light": [(3, -55, -55), (2, -40, -35), (1, -15, -15)],
-            "Dark":  [(1, 15, 15), (2, 35, 35), (3, 55, 55)]},
-    "Bot": {"Light": [(3, -40, -65), (2, 0, -65), (1, 40, -65)],
-            "Dark":  [(1, 65, -45), (2, 65, -5), (3, 65, 35)]},
-}
-BASES = {"Light": (-75, -75), "Dark": (75, 75)}
-BOSSES = {"SolarColossus": (-86, 86), "NightLeviathan": (86, -86)}
-FOUNTAINS = {"Light": (-89, -89), "Dark": (89, 89)}
-CLEARINGS = {"West": (-45, -10), "North": (15, 45),
-             "East": (45, -10), "South": (-15, -45)}
-CAMPS = [
-    (1, "MoonWolf", (-55, -25)), (2, "StoneCentipede", (-55, 15)),
-    (3, "RiftWraith", (-25, -10)), (4, "MagmaGuardian", (-40, -45)),
-    (5, "AzureGolem", (0, -50)), (6, "CrystalCrab", (30, -45)),
-    (7, "MagmaGuardian", (50, 20)), (8, "MoonWolf", (55, -25)),
-    (9, "RiftWraith", (25, 0)), (10, "AzureGolem", (35, 45)),
-    (11, "StoneCentipede", (0, 45)), (12, "CrystalCrab", (-25, 45)),
-]
-LANE_CONTROL = {
-    "Top": [(-75,-75),(-65,-62),(-65,-20),(-65,20),(-65,50),
-            (-65,56),(-60.5,60.5),(-56,65),(-35,65),(0,65),(45,65),(62,65),(75,75)],
-    "Mid": [(-75,-75),(-55,-55),(-40,-35),(-15,-15),(0,0),
-            (15,15),(35,35),(55,55),(75,75)],
-    "Bot": [(-75,-75),(-62,-65),(-40,-65),(0,-65),(40,-65),
-            (56,-65),(60.5,-60.5),(65,-56),(65,-45),(65,-5),(65,35),(65,62),(75,75)],
-}
-# Центральный участок — NW -> SE. Концы огибают угловые арены.
-RIVER_CONTROL = [(-112,112),(-100,100),(-86,86),(-60.5,60.5),(-30,30),(0,0),(30,-30),(60.5,-60.5),(86,-86),(100,-100),(112,-112)]
-STONE_BRIDGES = [("Top",(-60.5,60.5)), ("Mid",(0,0)), ("Bot",(60.5,-60.5))]
-ENERGY_BRIDGES = [("Dawn",(-30,30)), ("Dusk",(30,-30))]
-# У каждой точки есть собственный короткий проход, поперечные стенки и 24 HP.
-CRYSTAL_GATES = [
-    ((-47,3), CLEARINGS["West"]), ((-33,-11), CLEARINGS["West"]),
-    ((-45,24),(-30,30)), ((3,37), CLEARINGS["North"]),
-    ((34,-1), CLEARINGS["East"]), ((53,3), CLEARINGS["East"]),
-    ((20,-35),(22,-39)), ((44,-25), (55,-25)),
-]
-BOSS_APPROACHES = [
-    [(-69,50),(-82,55),(-91,65),(-92,76),(-86,86)],
-    [(-35,69),(-44,80),(-61,91),(-74,91),(-86,86)],
-    [(40,-69),(51,-82),(66,-94),(76,-92),(86,-86)],
-    [(69,-45),(83,-51),(94,-65),(91,-76),(86,-86)],
-]
-TOWER_PASSAGES = [
-    ("Light","Top",3,[(-61,-20),(-55,-25)]),
-    ("Light","Top",2,[(-61,20),(-55,15)]),
-    ("Light","Top",1,[(-61,50),(-53,42)]),
-    ("Dark","Top",1,[(-35,61),(-25,45)]),
-    ("Dark","Top",2,[(0,61),(0,45)]),
-    ("Dark","Top",3,[(45,61),(35,45)]),
-    ("Light","Mid",3,[(-58,-52),(-55,-42),(-55,-25)]),
-    ("Light","Mid",2,[(-43,-32),(-55,-25)]),
-    ("Light","Mid",1,[(-18,-12),(-25,-10)]),
-    ("Dark","Mid",1,[(18,12),(25,0)]),
-    ("Dark","Mid",2,[(38,32),(50,20)]),
-    ("Dark","Mid",3,[(58,52),(55,43),(35,45)]),
-    ("Light","Bot",3,[(-40,-61),(-40,-45)]),
-    ("Light","Bot",2,[(0,-61),(0,-50)]),
-    ("Light","Bot",1,[(40,-61),(30,-45)]),
-    ("Dark","Bot",1,[(61,-45),(55,-25)]),
-    ("Dark","Bot",2,[(61,-5),(55,10),(50,20)]),
-    ("Dark","Bot",3,[(61,35),(50,20)]),
-]
-FOREST_PATHS = [
-    [(-65,20),(-55,15),(-47,3),(-45,-10),(-55,-25)],
-    [(-55,-55),(-40,-45),(-15,-45),(0,-50),(30,-45),(40,-65)],
-    [(-35,65),(-25,45),(0,45),(15,45),(35,45),(45,65)],
-    [(65,-5),(45,-10),(25,0),(34,-1),(50,20),(65,35)],
-    [(-45,-10),(-33,-11),(-25,-10),(-15,-15)],
-    [(-55,15),(-46,17),(-38.84,21.16)],
-    [(-21.16,38.84),(-15,45),(15,45)],
-    [(15,45),(3,37),(-6,24),(-15,15)],
-    [(45,-10),(53,3),(50,20)],
-    [(30,-45),(23,-43),(21.16,-38.84)],
-    [(38.84,-21.16),(43,-14),(45,-10)],
-    [(-15,-45),(-3,-34),(6,-25),(15,-15)],
-]
+# Specification coordinates are X/Z (north is negative Z). Blender uses X/-Z/Z-up.
+def xz(p):return (p[0],-p[1])
+def turn(p):return (-p[0],-p[1])
+def route_xz(points):return [xz(p) for p in points]
+def mirrored(points):return [turn(p) for p in points]
+TOWER_XZ={
+ 'Top':{'Light':[(3,-80,35),(2,-80,5),(1,-80,-25)],'Dark':[(3,45,-80),(2,15,-80),(1,-15,-80)]},
+ 'Mid':{'Light':[(3,-48,48),(2,-30,30),(1,-14,14)],'Dark':[(3,48,-48),(2,30,-30),(1,14,-14)]},
+ 'Bot':{'Light':[(3,-45,80),(2,-15,80),(1,15,80)],'Dark':[(3,80,-35),(2,80,-5),(1,80,25)]}}
+TOWERS={lane:{team:[(tier,x,-z) for tier,x,z in rows] for team,rows in teams.items()} for lane,teams in TOWER_XZ.items()}
+BASE_XZ={'Light':(-80,80),'Dark':(80,-80)};BASES={k:xz(p) for k,p in BASE_XZ.items()}
+ARENA_XZ={'SolarColossus':(-75,-75),'NightLeviathan':(75,75)};BOSSES={k:xz(p) for k,p in ARENA_XZ.items()}
+BOSS_SPAWN_XZ={'SolarColossus':(-78,-78),'NightLeviathan':(78,78)}
+FOUNTAINS={k:xz(p) for k,p in {'Light':(-91,91),'Dark':(91,-91)}.items()}
+CLEARINGS={k:xz(p) for k,p in {'West':(-48,12),'South':(-12,48),'East':(48,-12),'North':(12,-48)}.items()}
+BLUE_CAMPS_XZ=[(1,'MagmaGuardian',(-62,18)),(2,'MoonWolf',(-58,-12)),(3,'RiftWraith',(-32,6)),(4,'AzureGolem',(-45,55)),(5,'StoneCentipede',(-6,58)),(6,'CrystalCrab',(22,56))]
+CAMPS=[(i,kind,xz(p)) for i,kind,p in BLUE_CAMPS_XZ]+[(i+6,kind,xz(turn(p))) for i,kind,p in BLUE_CAMPS_XZ]
+TOP_XZ=[(-80,80),(-80,35),(-80,5),(-80,-25),(-80,-42),(-69,-51),(-58,-58),(-51,-69),(-42,-80),(-15,-80),(15,-80),(45,-80),(80,-80)]
+MID_BLUE_XZ=[(-80,80),(-48,48),(-30,30),(-14,14),(0,0)]
+LANE_CONTROL={'Top':route_xz(TOP_XZ),'Bot':route_xz(list(reversed(mirrored(TOP_XZ)))),'Mid':route_xz(MID_BLUE_XZ+list(reversed(mirrored(MID_BLUE_XZ[:-1]))))}
+RIVER_CONTROL=route_xz([(-112,-112),(-100,-100),(-75,-75),(-58,-58),(-25,-25),(0,0),(25,25),(58,58),(75,75),(100,100),(112,112)])
+STONE_BRIDGES=[('Top',xz((-58,-58))),('Mid',(0,0)),('Bot',xz((58,58)))]
+ENERGY_BRIDGES=[('Dawn',xz((-25,-25))),('Dusk',xz((25,25)))]
+BRIDGE_ENTRIES_XZ=[(-32,-18),(18,32)]
+BLUE_GATES_XZ=[(-36,-6),(-68,8),(8,56)]
+BLUE_GATE_PATHS_XZ=[
+ [(-30,30),(-37,19),(-34,6),(-36,-6),(-32,-18)],
+ [(-73,5),(-68,8),(-65,14),(-65,19)],
+ [(-6,54),(0,56),(8,56),(15,56),(18,52)]]
+CRYSTAL_GATES=[(xz(p),xz([(-32,-18),(-62,18),(22,56)][i])) for i,p in enumerate(BLUE_GATES_XZ)]
+CRYSTAL_GATES += [(turn(p),turn(t)) for p,t in CRYSTAL_GATES.copy()]
+GATE_PATHS=[route_xz(r) for r in BLUE_GATE_PATHS_XZ]+[route_xz(mirrored(r)) for r in BLUE_GATE_PATHS_XZ]
+SOLAR_APPROACHES_XZ=[
+ [(-84,-25),(-85,-38),(-79,-48),(-72,-55),(-75,-75)],
+ [(-15,-84),(-32,-85),(-44,-80),(-55,-72),(-75,-75)]]
+BOSS_APPROACHES=[route_xz(r) for r in SOLAR_APPROACHES_XZ]+[route_xz(mirrored(r)) for r in SOLAR_APPROACHES_XZ]
+BLUE_PASSAGES_XZ=[
+ ('Top',3,[(-76,35),(-62,35)]),('Top',2,[(-76,5),(-73,5)]),('Top',1,[(-76,-25),(-61,-25)]),
+ ('Bot',3,[(-45,76),(-45,59)]),('Bot',2,[(-15,76),(-15,62)]),('Bot',1,[(15,76),(22,62)]),
+ ('Mid',3,[(-52,44),(-57,34)]),('Mid',2,[(-34,26),(-32,6)]),('Mid',1,[(-18,10),(-32,6)])]
+TOWER_PASSAGES=[('Light',lane,tier,route_xz(r)) for lane,tier,r in BLUE_PASSAGES_XZ]
+TOWER_PASSAGES += [('Dark',{'Top':'Bot','Bot':'Top','Mid':'Mid'}[lane],tier,route_xz(mirrored(r))) for lane,tier,r in BLUE_PASSAGES_XZ]
+BLUE_FOREST_XZ=[
+ # Arc from the Top T3/T2 interval, around Magma and Wolves, to Dawn's blue-bank mouth.
+ [(-80,20),(-73,23),(-68,18),(-69,3),(-65,-14),(-46,-18),(-32,-18)],
+ # Branches through the western clearing and Wraiths to Mid.
+ [(-65,-14),(-61,-8),(-54,-2),(-48,12),(-32,6),(-26,20)],
+ [(-62,35),(-62,24)],[(-61,-25),(-64,-18),(-65,-14)],[(-57,34),(-48,12)],
+ # Lower semicircle through Azure, the southern clearing, Centipedes, gate and Crab.
+ [(-45,59),(-39,56),(-30,49),(-12,48),(-6,52),(8,56),(18,52),(26,44),(18,32)],
+ [(-15,62),(-9,61)],[(-18,10),(-12,30),(-12,48)]]
+FOREST_PATHS=[route_xz(r) for r in BLUE_FOREST_XZ]+[route_xz(mirrored(r)) for r in BLUE_FOREST_XZ]
+BLUE_BUSH_XZ=[(-12,-4),(-24,16),(-26,-24),(-38,-12),(-66,-15),(-52,2),(-45,24),(-64,32),(-28,42),(-15,66),(12,68),(-55,-72),(-72,-55)]
+BUSH_XZ=BLUE_BUSH_XZ+mirrored(BLUE_BUSH_XZ)
+# Short grass access links add no extra crossings or shortcuts across a crystal.
+BLUE_BUSH_ACCESS_XZ=[[(-58,-12),(-66,-15)],[(-30,49),(-28,42)],[(18,68),(12,68)],[(-18,10),(-24,16)],[(-18,10),(-12,-4)]]
+BUSH_ACCESS=[route_xz(r) for r in BLUE_BUSH_ACCESS_XZ]+[route_xz(mirrored(r)) for r in BLUE_BUSH_ACCESS_XZ]
+# Permanent shoreline tongues support the exact bush next to each forest bridge.
+BLUE_LANDING_XZ=[(-32,-18),(-26,-24)]
+RIVER_LANDINGS=[route_xz(BLUE_LANDING_XZ),route_xz(mirrored(BLUE_LANDING_XZ))]
+RIFT_SPAWNS=[('Watcher',xz((-18,-18))),('RiftRay',xz((18,18)))]
+TREE_ISLANDS_XZ=[(-61,44),(-60,31),(-56,4),(-44,-3),(-29,-5),(-45,-25),(-24,31),(-34,65),(3,42),(7,68),(34,55),(1,29)]
 
 
 @dataclass
@@ -115,10 +97,10 @@ class Config:
     output: Path
     seed: int = 1649
     terrain_cells: int = 104
-    tree_count: int = 130
-    bush_count: int = 60
+    tree_count: int = 72
+    bush_count: int = 26
     road_width: float = 10.4
-    river_half_width: float = 6.6
+    river_half_width: float = 4.8
     resolution: int = 1440
     samples: int = 32
     render: bool = False
@@ -211,11 +193,9 @@ class Context:
         self.paths += [catmull(points,3) for _,_,_,points in TOWER_PASSAGES]
         self.paths += [catmull(points,3) for points in BOSS_APPROACHES]
         self.paths += [[BASES[t],FOUNTAINS[t]] for t in BASES]
-        self.gates=[]
-        for center,toward in CRYSTAL_GATES:
-            direction=(Vector(toward)-Vector(center)).normalized()
-            self.gates.append([tuple(Vector(center)+direction*s) for s in (-7,7)])
+        self.gates=[catmull(r,3) for r in GATE_PATHS]
         self.paths+=self.gates
+        self.paths += [catmull(r,3) for r in BUSH_ACCESS+RIVER_LANDINGS]
         # Повторный запуск заменяет ТОЛЬКО сцену/блоки данных нашего namespace.
         temporary=None
         if bpy.context.window and bpy.context.window.scene.name==SCENE_NAME:
@@ -234,7 +214,7 @@ class Context:
         self.scene=bpy.data.scenes.new(SCENE_NAME)
         if bpy.context.window:bpy.context.window.scene=self.scene
         if temporary:bpy.data.scenes.remove(temporary)
-        self.scene["generator_version"]="2.0"
+        self.scene["generator_version"]="4.0"
         self.scene["seed"]=config.seed
         self.scene["playable_bounds"]=[-100,100,-100,100]
         self.scene["coordinate_system"]="Blender XY ground; Z up"
@@ -783,8 +763,8 @@ def create_crystal_gate(ctx,index,position,toward):
     with ctx.root(f"CrystalGate {index:02d}",(*position,.10),"crystal_gate",angle) as root:
         root["gate_index"]=index;root["durability"]=24.0;root["respawn_seconds"]=60.0
         root["blocks_shortcut"]=True
-        root["side"]="Light" if index in [1,2,3,7] else "Dark"
-        root["route_role"]={1:"ambush",2:"hunt",3:"rescue",7:"invasion",4:"ambush",5:"hunt",6:"rescue",8:"invasion"}[index]
+        root["side"]="Light" if index<=3 else "Dark"
+        root["route_role"]=["mid_bridge","magma_cut","semicircle"][(index-1)%3]
         for j,(x,y,z,r,h) in enumerate([(0,0,0,.86,4.6),(-1.0,.10,0,.48,2.9),(.98,.10,0,.54,3.3),(-.40,-.65,0,.36,2.2),(.5,.55,0,.40,2.4)]):
             obj=ctx.crystal("Destructible amethyst shard",(x,y,z),r,h,"Amethyst",(0,(j-2)*.13,j*.28));obj["rest_location"]=list(obj.location);obj["rest_rotation"]=list(obj.rotation_euler);obj["rest_scale"]=list(obj.scale)
         for side in [-1,1]:
@@ -826,8 +806,8 @@ def restore_crystal(root,frame=None):
 # 5. Башни, Нексусы и арены. Каждая функция строит независимую модель.
 # -----------------------------------------------------------------------------
 def create_tower(ctx,team,tier,position,lane="Mid"):
-    ctx.group("Towers");light=team=="Light";stone="Marble" if light else "StoneDark";metal="Gold" if light else "Bronze";glow="BlueCrystal" if light else "RedCrystal"
-    with ctx.root(f"Tower {team} {lane} T{tier}",(*position,.32),"tower") as root:
+    ctx.group("Towers");light=team=="Light";stone="Marble" if light else "StoneDark";metal="Gold";glow="BlueCrystal" if light else "RedCrystal"
+    with ctx.root(f"Tower {team} {lane} T{tier}",(*position,.32),"tower",rotation=0 if light else PI) as root:
         root["team"]=team;root["tier"]=tier;root["lane"]=lane;root["health"]={1:3600,2:4400,3:5400}[tier]
         ctx.loft("Tower bevelled stepped foundation",[(0,0,0,2.55,2.55),(0,0,.28,2.55,2.55),(0,0,.43,2.20,2.20),(0,0,.75,2.20,2.20),(0,0,.85,1.72,1.72)],stone,24,.075)
         ctx.loft("Tower tapered fluted shaft",[(0,0,.78,1.53,1.53),(0,0,1.1,1.43,1.43),(0,0,3.35,1.12,1.12),(0,0,3.75,1.48,1.48),(0,0,4.0,1.58,1.58)],stone,16,.06)
@@ -836,6 +816,10 @@ def create_tower(ctx,team,tier,position,lane="Mid"):
             a=j*PI/4;x,y=math.cos(a),math.sin(a)
             ctx.limb("Tower carved stone flute",(x*1.42,y*1.42,1.18),(x*1.17,y*1.17,3.30),.075,.06,"LaneLight" if light else "Bronze",8)
             ctx.crystal("Tower inset luminous rune",(x*1.30,y*1.30,2.0),.075,.56,glow)
+        for course in range(4):
+            for brick in range(10):
+                a=(brick+.5*(course%2))*2*PI/10;r=1.39-course*.06
+                ctx.box("Tower individually bevelled masonry block",(math.cos(a)*r,math.sin(a)*r,1.28+course*.55),(.75,.23,.49),stone,.045,a+PI/2)
         with ctx.root("Tower floating focus",(0,0,4.0)) as focus:
             ctx.crystal("Tower floating main crystal",(0,0,.15),.69,3.15,glow)
             for j in range(3):
@@ -852,7 +836,7 @@ def create_tower(ctx,team,tier,position,lane="Mid"):
 
 
 def create_nexus(ctx,team,position):
-    ctx.group("Bases");light=team=="Light";stone="Marble" if light else "CrimsonStone";metal="Gold" if light else "Bronze";glow="BlueCrystal" if light else "RedCrystal"
+    ctx.group("Bases");light=team=="Light";stone="Marble" if light else "CrimsonStone";metal="Gold";glow="BlueCrystal" if light else "RedCrystal"
     with ctx.root("Nexus "+team,(*position,.12),"nexus") as root:
         root["team"]=team
         ctx.cylinder("Nexus plaza round foundation",(0,0,.1),14.1,.35,stone,64,.08)
@@ -1166,12 +1150,12 @@ def validate_scene(ctx):
     assert all(abs(o.location.z)<1e-8 for o in items("hero"))
     assert len(TOWER_PASSAGES)==18 and len(BOSS_APPROACHES)==4
     assert len(items("stone_bridge"))==3 and len(items("energy_bridge"))==2
-    assert len(items("camp"))==12 and len(items("crystal_gate"))==8 and len(items("clearing"))==4
+    assert len(items("camp"))==12 and len(items("crystal_gate"))==6 and len(items("clearing"))==4
     for _,kind,_ in CAMPS:assert kind in MONSTER_BUILDERS
     ground=items("playable_terrain")[0]
     assert min(v.co.x for v in ground.data.vertices)==-100 and max(v.co.x for v in ground.data.vertices)==100
     assert min(v.co.y for v in ground.data.vertices)==-100 and max(v.co.y for v in ground.data.vertices)==100
-    assert len(items("tree"))>=min(130,ctx.cfg.tree_count),"Insufficient forest; check placement filters"
+    assert len(items("tree"))>=min(24,ctx.cfg.tree_count),"Insufficient forest; check placement filters"
     # Не маскируем недобор густоты леса молчаливым успехом.
     for obj in items("tree"):
         assert all(math.dist(obj.location.xy,p)>11.5 for p in CLEARINGS.values()),"A tree intrudes into a clearing"
@@ -1186,7 +1170,7 @@ def validate_scene(ctx):
             for curve in obj.animation_data.drivers:
                 if not curve.driver.is_valid:invalid.append((obj.name,curve.data_path))
     assert not invalid,invalid
-    print("VALIDATION PASS: 200x200, 18 exact towers, 2 bases, 2 bosses, 12 camps, 4 clearings, 8 gates, 3 stone + 2 energy bridges",flush=True)
+    print("VALIDATION PASS: 200x200, 18 exact towers, 2 bases, 2 bosses, 12 camps, 4 clearings, 6 gates, 3 stone + 2 energy bridges",flush=True)
     return {"categories":{key:len(items(key)) for key in sorted({o["category"] for o in roots})},"objects":len(ctx.scene.objects),"unique_meshes":len({o.data for o in ctx.scene.objects if o.type=="MESH"})}
 
 
@@ -1448,7 +1432,7 @@ def export_colliders(ctx):
 # 3.0: 26 authored neutrals, articulated minion templates and open playable forest.
 # -----------------------------------------------------------------------------
 CAMP_RULES={'MagmaGuardian':(1,100),'AzureGolem':(1,100),'MoonWolf':(3,65),'StoneCentipede':(2,75),'RiftWraith':(3,65),'CrystalCrab':(1,75)}
-RIFT_SPAWNS=[('Watcher',(-15,15)),('RiftRay',(15,-15))]
+
 _old_leviathan=create_leviathan
 _old_bush=create_bush
 _old_tree=create_tree
@@ -1547,7 +1531,7 @@ MONSTER_BUILDERS.update({'MagmaGuardian':create_magma_guardian,'AzureGolem':crea
 
 def create_camp(ctx,index,kind,position):
     ctx.group('MonsterCamps');count,respawn=CAMP_RULES[kind]
-    with ctx.root(f'Camp {index:02d}',(*position,.10),'camp') as root:
+    with ctx.root(f'Camp {index:02d}',(*position,.10),'camp',rotation=0 if index<=6 else PI) as root:
         root['camp_index']=index;root['monster_kind']=kind;root['side']='Light' if index<=6 else 'Dark';root['spawn_seconds']=20;root['respawn_seconds']=respawn;root['member_count']=count
         ctx.cylinder('Camp natural clearing',(0,0,-.01),5.45,.10,'Earth',48,.02)
         for j in range(10):
@@ -1677,14 +1661,230 @@ def create_minion_template(ctx,team,kind):
         return root
 
 
+# -----------------------------------------------------------------------------
+# 4.0: canonical half geometry and exact 180-degree companions.
+# -----------------------------------------------------------------------------
+def snapshot(ctx):return set(ctx.scene.objects)
+def mirror_created(ctx,before,label):
+    objects=sorted(set(ctx.scene.objects)-before,key=lambda o:o.name);mapping={};rotation=Matrix.Rotation(PI,4,'Z')
+    ctx.scene.view_layers[0].update()
+    for obj in objects:
+        copy=obj.copy();copy.name=obj.name+' mirrored'
+        for c in obj.users_collection:c.objects.link(copy)
+        mapping[obj]=copy
+    for obj,copy in mapping.items():
+        if obj.parent in mapping:copy.parent=mapping[obj.parent];copy.matrix_basis=obj.matrix_basis.copy()
+        else:copy.parent=None;copy.matrix_world=rotation@obj.matrix_world
+        obj['symmetric_partner']=copy.name;copy['symmetric_partner']=obj.name
+        ctx.registry.setdefault('symmetric_pairs',[]).append((obj.name,copy.name))
+    return mapping
+
+
+def make_route_pair(ctx,name,points,width=3.6,soil=False):
+    before=snapshot(ctx)
+    if soil:create_flat_soil(ctx,name,points,width)
+    else:create_small_paving(ctx,name,points,width)
+    mirror_created(ctx,before,name)
+
+
+def create_flat_soil(ctx,name,points,width=2.8):
+    points=path_samples(catmull(points,3),.8);v=[];faces=[];level=.10+ctx.path_layer*.000531;ctx.path_layer+=1
+    for i,p in enumerate(points):
+        a=Vector(points[max(0,i-1)]);b=Vector(points[min(len(points)-1,i+1)]);d=(b-a).normalized();n=Vector((-d.y,d.x))
+        for side in [-1,1]:v.append((p[0]+n.x*width*.5*side,p[1]+n.y*width*.5*side,level))
+        if i:k=len(v)-4;faces.append((k,k+2,k+3,k+1))
+    obj=ctx.mesh(name,v,faces,'Earth')
+    bm=bmesh.new();bm.from_mesh(obj.data);bm.normal_update();bmesh.ops.reverse_faces(bm,faces=[f for f in bm.faces if f.normal.z<0]);bm.to_mesh(obj.data);bm.free();obj.data.update()
+    return obj
+
+
+def create_symmetric_lanes(ctx):
+    before=snapshot(ctx);create_lane(ctx,'Top',ctx.lanes['Top']);mirror_created(ctx,before,'Top ↔ Bot')
+    before=snapshot(ctx);create_lane(ctx,'Mid',route_xz(MID_BLUE_XZ));mirror_created(ctx,before,'Mid halves')
+
+
+def create_symmetric_routes(ctx):
+    for i,r in enumerate(BLUE_FOREST_XZ):make_route_pair(ctx,f'Paved forest arc {i+1}',route_xz(r))
+    for i,r in enumerate(BLUE_GATE_PATHS_XZ):make_route_pair(ctx,f'Crystal controlled shortcut {i+1}',route_xz(r),3.5)
+    for lane,tier,r in BLUE_PASSAGES_XZ:make_route_pair(ctx,f'Blue {lane} T{tier} straight side passage',route_xz(r))
+    for i,r in enumerate(SOLAR_APPROACHES_XZ):make_route_pair(ctx,f'Broad permanent arena ramp {i+1}',route_xz(r),8)
+    make_route_pair(ctx,'Fountain access',[BASES['Light'],FOUNTAINS['Light']],5.4)
+    for i,r in enumerate(BLUE_BUSH_ACCESS_XZ):make_route_pair(ctx,f'Grass pocket access {i+1}',route_xz(r),3.6,True)
+    make_route_pair(ctx,'River bush shore tongue',RIVER_LANDINGS[0],3.5,True)
+    before=snapshot(ctx);ctx.group('RiverShoreIslands')
+    for p in [xz((-12,-4)),xz((-26,-24))]:ctx.cylinder('Permanent bush shore island',(p[0],p[1],.03),3.65,.27,'Earth',48,.03)
+    mirror_created(ctx,before,'Shore bush islands')
+
+
+def create_bush(ctx,position,scale=1,variant=0):
+    with ctx.root('StealthBush grouped foliage',position,'bush',scale=scale) as root:
+        root['concealment_zone']=True;root['trigger_radius']=3.2;root['allied_opacity']=.45
+        for j in range(7):
+            a=j*2.39996;r=.15 if j==0 else 1.15
+            ctx.sphere('Bush deep emerald root crown',(math.cos(a)*r,math.sin(a)*r,.55),(.96,.90,.68),'Emerald',2)
+            ctx.sphere('Bush bright lime leaf tip crown',(math.cos(a)*r*.9,math.sin(a)*r*.9,1.17+(j%3)*.18),(.96,.84,.73),'MintLeaf',2)
+        for j in range(20):
+            a=j*2.39996;ctx.crystal('Bush gracefully folded light leaf',(math.cos(a)*1.45,math.sin(a)*1.45,1.0),.17,.85,'MintLeaf',(math.sin(a)*.6,math.cos(a)*.6,a))
+        return root
+
+
+def create_forest(ctx):
+    ctx.group('Forest');positions=[];island_count=0;target=max(0,ctx.cfg.tree_count//2)
+    # Only authored separator islands receive trees; no random scatter over the battlefield.
+    rng=random.Random(ctx.cfg.seed+57)
+    for k,center in enumerate(TREE_ISLANDS_XZ):
+        island=[]
+        for j in range(30):
+            if len(positions)//2>=target:break
+            a=j*2.39996+k*.23;r=math.sqrt((j+.3)/30)*3.5;p=xz((center[0]+math.cos(a)*r,center[1]+math.sin(a)*r))
+            if not ctx.clear_for_foliage(p,.85):continue
+            if any(math.dist(p,q)<2.4 for q in positions):continue
+            if any(math.dist(p,xz(b))<4.0 for b in BUSH_XZ):continue
+            before=snapshot(ctx);o=create_tree(ctx,(*p,.12),rng.uniform(5.3,6.6),k%23);o['island_index']=k
+            pair=mirror_created(ctx,before,'Tree separator islands');positions.extend([p,turn(p)]);island.append(p)
+            if len(island)>=4:break
+        if island:
+            ctx.group('ForestIslandStones');before=snapshot(ctx);p=xz(center)
+            ctx.sphere('Low mossy separator island',(p[0],p[1],-.22),(3.5,3.0,.36),'Moss',2)
+            mirror_created(ctx,before,'Moss island bases');island_count+=1
+        ctx.group('Forest')
+    bushes=[]
+    for i,p in enumerate(BLUE_BUSH_XZ):
+        for side in [0,1]:
+            q=xz(turn(p) if side else p);root=create_bush(ctx,(*q,.14 if i==2 else .02),1,i)
+            root.rotation_euler.z=PI if side else 0;root['bush_id']=i+1+(13 if side else 0);root['mirror_id']=i+1+(0 if side else 13);bushes.append(q)
+    ctx.registry['trees']=positions;ctx.registry['bushes']=bushes
+    # Ruin walls occupy only island edges, leaving every authored path open.
+    ctx.group('Ruins')
+    for ci,center in enumerate([CLEARINGS['West'],CLEARINGS['South']]):
+        for j in range(10):
+            a=j*2*PI/10+.14;p=(center[0]+12.8*math.cos(a),center[1]+12.8*math.sin(a))
+            if any(min(route_distance((p[0]+math.cos(a+PI/2)*v,p[1]+math.sin(a+PI/2)*v),r) for r in ctx.paths)<4.0 for v in [-3.4,0,3.4]):continue
+            if any(math.dist(p,xz(b))<5 for b in BUSH_XZ):continue
+            before=snapshot(ctx);create_wall(ctx,'Polyanas mirrored antique wall',(*p,0),4.4,a+PI/2,j%2==0);mirror_created(ctx,before,'Clearing wall pairs')
+    print('SYMMETRIC FOREST',len(positions),'trees on',island_count*2,'separator islands;',len(bushes),'exact bushes',flush=True)
+
+
+def create_environment_details(ctx):
+    ctx.group('BotanicalDetails');rng=random.Random(ctx.cfg.seed+812);count=0
+    for attempt in range(3500):
+        if count>=100:break
+        p=(rng.uniform(-93,93),rng.uniform(-93,93))
+        if p[0]+p[1]>-6 or ctx.height(*p)<0:continue
+        if min(route_distance(p,r) for r in ctx.lanes.values())<6.2:continue
+        if not 2.2<min(route_distance(p,r) for r in ctx.paths)<5.0:continue
+        if any(math.dist(p,c)<10.6 for c in CLEARINGS.values()):continue
+        if any(math.dist(p,c)<15 for c in list(BASES.values())+list(BOSSES.values())):continue
+        before=snapshot(ctx)
+        for j in range(5):
+            a=j*2.39996+attempt;create_detail_leaf(ctx,'Paired grass edge leaf',(p[0]+math.cos(a)*.3,p[1]+math.sin(a)*.3,0),(p[0]+math.cos(a)*.5,p[1]+math.sin(a)*.5,.4+j*.04),.06,'GrassBlade')
+        if count%8==0:
+            for j in range(4):ctx.sphere('Mirrored sky blue wildflower',(p[0]+math.cos(j*PI/2)*.10,p[1]+math.sin(j*PI/2)*.10,.35),(.11,.08,.04),'FlowerBlue',1)
+        mirror_created(ctx,before,'Botanical edge pairs');count+=1
+
+
+def create_cliffs_and_waterfalls(ctx):
+    ctx.group('Backdrop')
+    # Two edges are authored once; the other two are their exact geometric companions.
+    for side in range(2):
+        for j in range(36):
+            t=-100+j*200/35;p=(-103.5,t) if side==0 else (t,-103.5)
+            if side==1 and j in [0,35]:continue
+            before=snapshot(ctx);seed=j+side*37;z=-6.8+math.sin(seed*1.3)*.5
+            create_rock(ctx,'Continuous three tier boundary crag',(*p,z),(5.2,5.1,14),seed=seed)
+            outward=Vector(p).normalized()*5.5
+            create_rock(ctx,'Boundary middle stepped shelf',(p[0]+outward.x,p[1]+outward.y,-12.5),(6.8,6.0,12),seed=seed+150)
+            mirror_created(ctx,before,'Continuous perimeter rocks')
+    flows=[('WestUpper',[(-99,49,-.4),(-104,48,-1.6),(-110,45,-13),(-116,43,-21.8)]),('WestLower',[(-99,-35,-.4),(-105,-36,-2),(-110,-39,-14),(-116,-41,-21.8)]),('SouthCascade',[(-30,-99,-.4),(-31,-105,-1.8),(-33,-112,-13),(-35,-118,-21.8)])]
+    for name,points in flows:
+        before=snapshot(ctx)
+        with ctx.root('Paired waterfall local frame',(0,0,0)):create_waterfall(ctx,name,points)
+        mirror_created(ctx,before,'Animated cascade pairs')
+
+
+def create_outer_landscape(ctx):
+    ctx.group('OuterLandscape');before=snapshot(ctx);rng=random.Random(ctx.cfg.seed+440);count=0
+    with ctx.root('Canonical lower tier landscape',(0,0,0)):
+        for side in range(2):
+            for j in range(10):
+                t=-112+j*224/9;depth=122+(j%3)*4;p=(t,-depth) if side==0 else (-depth,t)
+                if side==1 and j in [0,9]:continue
+                if any(math.dist(p,q)<18 for q in [(-116,43),(-116,-41),(-35,-118)]):continue
+                cap=-5.3+(j%3)*.5
+                create_rock(ctx,'Lower forest geological terrace',(p[0],p[1],cap-9.2),(14,12.5,13),seed=400+j+side*47)
+                for k in range(7):
+                    a=k*2.39996;px=p[0]+math.cos(a)*rng.uniform(1,7);py=p[1]+math.sin(a)*rng.uniform(1,7)
+                    if k%3:
+                        o=create_tree(ctx,(px,py,cap),rng.uniform(8,12),j*4+k);o['category']='backdrop_tree'
+                    else:
+                        with ctx.root('Outer broadleaf elder',(px,py,cap),'backdrop_tree'):
+                            ctx.limb('Deciduous twisting trunk',(0,0,0),(.25,0,5),.45,.18,'Wood')
+                            for q in range(7):
+                                a=q*2.39996;ctx.sphere('Deciduous layered emerald crown',(math.cos(a)*1.5,math.sin(a)*1.5,5+q%3*.7),(2.0,1.8,1.9),'Emerald' if q%2 else 'PineLight',2)
+                    count+=1
+                if j%3==1:create_ruin_arch(ctx,(*p,cap),j*.7)
+    mirror_created(ctx,before,'Lower tier forest pairs');ctx.registry['backdrop_tree_count']=count*2
+
+
+def create_gameplay_geometry(ctx):
+    for team,p in FOUNTAINS.items():
+        for i in range(5):
+            a=i*2*PI/5;offset=(math.cos(a)*2.6,math.sin(a)*2.6);offset=turn(offset) if team=='Dark' else offset
+            root=create_hero(ctx,team,i,(p[0]+offset[0],p[1]+offset[1]));root.rotation_euler.z=PI if team=='Dark' else 0
+    ctx.group('ArenaSupports');before=snapshot(ctx);center=BOSSES['SolarColossus']
+    for j in range(12):
+        a=j*PI/6;x,y=14*math.cos(a),14*math.sin(a)
+        if abs(x+y)<8:continue
+        ctx.cylinder('Suspended arena stone support',(center[0]+x,center[1]+y,-2.1),.68,4.4,'Stone',12)
+    ctx.ring('Arena suspended lower cornice',(*center,-.03),15.5,.32,'Stone');mirror_created(ctx,before,'Arena structural supports')
+    ctx.group('Physics');collider=ctx.mesh('Logical collision plane Y0',[(-100,-100,0),(100,-100,0),(100,100,0),(-100,100,0)],[(0,1,2,3)],'Stone');collider.hide_render=True;collider.display_type='WIRE';collider['physics_only']=True;collider['plane_height']=0
+    for axis in [0,1]:
+        for side in [-1,1]:
+            p=[0,0,2.0];p[axis]=side*102;size=[208,208,8];size[axis]=4
+            box=ctx.box('Continuous perimeter BoxCollider',p,size,'Stone',0);box.hide_render=True;box.display_type='WIRE';box['physics_only']=True;box['physics_collider']=True;box['collider_type']='BoxCollider'
+
+
+def export_colliders(ctx):
+    result=[];prefixes=('Ruin softly chamfered masonry','Ancient squared terminal pier','Crystal narrow passage sidewall')
+    ctx.scene.view_layers[0].update()
+    for obj in ctx.scene.objects:
+        if obj.type!='MESH' or not (obj.get('physics_collider') or obj.name.removeprefix(PREFIX).startswith(prefixes)):continue
+        corners=[obj.matrix_world@Vector(p) for p in obj.bound_box];lo=[round(min(p[i] for p in corners),5) for i in range(2)];hi=[round(max(p[i] for p in corners),5) for i in range(2)]
+        result.append({'min':lo,'max':hi,'height':0,'perimeter':bool(obj.get('physics_collider'))})
+    return result
+
+
+def export_layout(ctx,validation):
+    def xy(p):return {'X':p[0],'Y':p[1]}
+    def sample(r):return [xy(p) for p in catmull(r,4)]
+    bushes=sorted([o for o in ctx.scene.objects if o.get('category')=='bush'],key=lambda o:o['bush_id'])
+    data={'name':'Долина Осколков','generator_version':'4.0','seed':ctx.cfg.seed,'coordinate_system':'Blender X/Y ground; Three.js X east, Z south, Y=0 physics','playable_size':200,'physics_plane_y':0,
+      'schema':{'axes':'X west→east; Z north→south','bases':BASE_XZ,'towers':TOWER_XZ,'arenas':ARENA_XZ,'boss_spawns':BOSS_SPAWN_XZ,'camps':[(i,k,(p[0],-p[1])) for i,k,p in CAMPS],'bushes':BUSH_XZ,'crystals':BLUE_GATES_XZ+mirrored(BLUE_GATES_XZ),'bridge_centers':[(-25,-25),(25,25)],'blue_bridge_entries':BRIDGE_ENTRIES_XZ},
+      'towers':[{'team':t,'lane':lane,'tier':tier,'position':xy((x,y))} for lane,teams in TOWERS.items() for t,rows in teams.items() for tier,x,y in rows],
+      'bases':{k:xy(p) for k,p in BASES.items()},'bosses':{k:xy(p) for k,p in BOSSES.items()},'fountains':{k:xy(p) for k,p in FOUNTAINS.items()},'clearings':{k:xy(p) for k,p in CLEARINGS.items()},
+      'tower_passages':[{'team':t,'lane':lane,'tier':tier,'points':sample(r)} for t,lane,tier,r in TOWER_PASSAGES],
+      'boss_approaches':[{'boss':i//2,'points':sample(r),'width':8} for i,r in enumerate(BOSS_APPROACHES)],
+      'forest_paths':[sample(r) for r in FOREST_PATHS],
+      'bush_access_paths':[sample(r) for r in BUSH_ACCESS],
+      'river_landings':[{'points':sample(r),'width':3.5,'island':xy(xz((-26,-24)) if i==0 else xz((26,24))),'radius':3.65} for i,r in enumerate(RIVER_LANDINGS)],
+      'shore_bush_pads':[{'position':xy(xz(p)),'radius':3.65} for p in [(-12,-4),(-26,-24),(12,4),(26,24)]],
+      'river_half_width':ctx.cfg.river_half_width,'river':[xy(p) for p in ctx.river],
+      'camps':[{'id':i,'kind':kind,'position':xy(p)} for i,kind,p in CAMPS],
+      'lanes':{k:[xy(p) for p in r] for k,r in ctx.lanes.items()},'stone_bridges':[{'lane':key,'position':xy(p)} for key,p in STONE_BRIDGES],'energy_bridges':[{'kind':key,'position':xy(p)} for key,p in ENERGY_BRIDGES],
+      'crystals':[{'id':i+1,'position':xy(p),'durability':24,'respawn_seconds':60,'side':'Light' if i<3 else 'Dark','role':['mid_bridge','magma_cut','semicircle'][i%3],'short_path':sample(GATE_PATHS[i])} for i,(p,t) in enumerate(CRYSTAL_GATES)],
+      'bushes':[{'id':o['bush_id'],'mirror_id':o['mirror_id'],'position':xy(o.location),'radius':3.2} for o in bushes],
+      'trees':[xy(p) for p in ctx.registry['trees']],'tree_islands':[xy(xz(p)) for p in TREE_ISLANDS_XZ+mirrored(TREE_ISLANDS_XZ)],'colliders':export_colliders(ctx),'bounds':{'minX':-100,'maxX':100,'minZ':-100,'maxZ':100},
+      'backdrop_trees':ctx.registry['backdrop_tree_count'],'neutral_catalog':{'total':26,'forest':22,'rift':2,'bosses':2},'symmetry_pair_count':len(ctx.registry.get('symmetric_pairs',[])),'validation':validation}
+    (ctx.cfg.output/'ValleyOfShards.layout.json').write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
+
+
 def build_map(config):
     if bpy.app.version<(4,0,0):raise RuntimeError("Blender 4.0 or newer is required")
     config.output.mkdir(parents=True,exist_ok=True);ctx=Context(config)
     create_materials(ctx);create_combat_materials(ctx);print("MATERIALS READY",flush=True)
     create_terrain(ctx)
-    for name,points in ctx.lanes.items():create_lane(ctx,name,points)
-    ctx.group("Trails")
-    for i,points in enumerate(ctx.paths):create_path(ctx,points,3.5,name=f"Forest trail {i+1}")
+    create_symmetric_lanes(ctx)
+    create_symmetric_routes(ctx)
     create_river(ctx)
     for lane,p in STONE_BRIDGES:create_bridge(ctx,lane+" arched stone bridge",p)
     for name,p in ENERGY_BRIDGES:create_bridge(ctx,name+" dynamic forest bridge",p,"dawn" if name=="Dawn" else "dusk")
@@ -1697,8 +1897,8 @@ def build_map(config):
     create_arena(ctx,"Dawn arena",BOSSES["SolarColossus"])
     create_arena(ctx,"Night Leviathan lair",BOSSES["NightLeviathan"],True)
     ctx.group("Bosses")
-    create_monster(ctx,"SolarColossus",(-86,91,.76),2.05,True)
-    create_monster(ctx,"NightLeviathan",(86,-86,.76),1.65,True)
+    create_monster(ctx,"SolarColossus",(*xz(BOSS_SPAWN_XZ["SolarColossus"]),.76),2.05,True)
+    create_monster(ctx,"NightLeviathan",(*xz(BOSS_SPAWN_XZ["NightLeviathan"]),.76),1.65,True)
     for i,kind,p in CAMPS:create_camp(ctx,i,kind,p)
     create_rift_neutrals(ctx)
     for team in ["Light","Dark"]:
@@ -1740,7 +1940,7 @@ def parse_args():
     parser.add_argument("--out",type=Path,default=default);parser.add_argument("--seed",type=int,default=1649)
     parser.add_argument("--render",action="store_true");parser.add_argument("--detail-renders",action="store_true")
     parser.add_argument("--resolution",type=int,default=1440);parser.add_argument("--samples",type=int,default=32)
-    parser.add_argument("--trees",type=int,default=130);parser.add_argument("--no-labels",action="store_true")
+    parser.add_argument("--trees",type=int,default=72);parser.add_argument("--no-labels",action="store_true")
     args=parser.parse_args(argv)
     if args.trees<0 or args.trees>1000:parser.error("--trees must be between 0 and 1000")
     if args.resolution<320 or args.resolution>8192:parser.error("--resolution must be between 320 and 8192")

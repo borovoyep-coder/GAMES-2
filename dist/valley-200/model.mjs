@@ -1,6 +1,6 @@
 // Small DOM-free model: binary decoding, map coordinates and interactive crystal state.
 export const toWorld=p=>[p[0],p[2]??0,-p[1]];
-export const coord=p=>`${Number(p[0].toFixed(1))}, ${Number(p[1].toFixed(1))}`;
+export const coord=p=>`${Number(p[0].toFixed(1))}, ${Number((-p[1]).toFixed(1))}`;
 export function decodeScenePart(buffer){
  const view=new DataView(buffer);if(buffer.byteLength<4)throw new Error('Truncated scene');const size=view.getUint32(0,true);if(size>buffer.byteLength-4)throw new Error('Invalid scene header');
  const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,4,size))),base=4+size;
@@ -21,6 +21,7 @@ export class MapState{
 export const names={Wolf:'Лунные волки',Spider:'Кристальный паук',GiantSpider:'Гигантский паук',Elemental:'Элементали',Boar:'Лесные кабаны',Golem:'Лазурные големы',GoldenGolem:'Золотой голем',ForestSpirit:'Лесные духи',Harpy:'Гарпии',Bear:'Древние медведи',GiantScorpion:'Гигантский скорпион',SolarColossus:'Солнечный Колосс',NightLeviathan:'Ночной Левиафан'};
 Object.assign(names,{MagmaGuardian:'Магмовый страж',AzureGolem:'Лазурный голем',MoonWolf:'Лунные волки',StoneCentipede:'Каменные сколопендры',RiftWraith:'Призраки разлома',CrystalCrab:'Хрустальный краб',Watcher:'Светляк-наблюдатель',RiftRay:'Скат разлома'});
 export function describe(entity){const p=entity.properties,category=entity.category;
+ if(category==='bush')return {title:`Заросли ${p.bush_id}`,tag:'StealthBush · укрытие',description:'Союзники видят скрытого героя с прозрачностью 45%. Противники, миньоны и башни теряют его из виду. Урон, умение или вражеский герой в тех же зарослях раскрывают укрытие.',stats:[['Радиус',`${p.trigger_radius}`],['Координаты X/Z',`${entity.position[0]}, ${-entity.position[1]}`]]};
  if(category==='minion')return {title:{Guard:'Страж',Caster:'Заклинатель',Siege:'Разрушитель'}[p.minion_kind],tag:p.team==='Light'?'Синий миньон':'Красный миньон',description:'Линейный боец. Атакует миньонов, затем строения и героев; не заходит в лес и не преследует уходящую цель.',stats:[['Линия',p.lane],['Здоровье',`${p.health} HP`]]};
  if(category==='neutral')return {title:names[p.monster_kind],tag:p.camp_index?'Лесной обитатель':'Существо разлома',description:p.member_index?'Младшее существо своего лагеря.':'Старший обитатель кармана. Линейные миньоны не атакуют нейтральных существ.',stats:[['Первое появление',`${p.spawn_seconds} с`],['Возрождение',`${p.respawn_seconds} с`]]};
  if(category==='tower')return {title:`Башня ${p.team==='Light'?'Света':'Тьмы'} · T${p.tier}`,tag:`${{Top:'Верхняя',Mid:'Центральная',Bot:'Нижняя'}[p.lane]} линия`,description:p.team==='Light'?'Мрамор и золото защищают парящий синий кристалл.':'Тёмный камень, бронза и алое сердце укрепления.',stats:[['Прочность',`${p.health} HP`],['Координаты',coord(entity.position)]]};
