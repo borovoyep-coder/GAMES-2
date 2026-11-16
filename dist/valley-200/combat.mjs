@@ -1,6 +1,6 @@
 // Fixed-step lane combat. All simulation coordinates remain (x, 0, z).
-import {PlanarWorld,xy,dist} from './gameplay.mjs?v=200.7';
-import {StealthSystem} from './stealth.mjs?v=200.7';
+import {PlanarWorld,xy,dist} from './gameplay.mjs?v=200.8';
+import {StealthSystem} from './stealth.mjs?v=200.8';
 export const UNIT_STATS=Object.freeze({Guard:{hp:640,damage:36,speed:4.1,range:2.8,detect:11,period:1.05,radius:.48},Caster:{hp:360,damage:44,speed:4.1,range:8,detect:12,period:1.35,radius:.42},Siege:{hp:1000,damage:65,speed:3.8,range:9.5,detect:13,period:1.8,radius:.85,buildingMultiplier:2.3}});
 export const NEUTRAL_STATS=Object.freeze({MagmaGuardian:{hp:1700,damage:75,respawn:100},AzureGolem:{hp:1600,damage:65,respawn:100},MoonWolf:{hp:920,damage:48,respawn:65},StoneCentipede:{hp:1100,damage:50,respawn:75},RiftWraith:{hp:700,damage:42,respawn:65},CrystalCrab:{hp:1900,damage:60,respawn:75},Watcher:{hp:1000,damage:38,respawn:90},RiftRay:{hp:1100,damage:42,respawn:90},SolarColossus:{hp:12000,damage:140,respawn:180},NightLeviathan:{hp:18000,damage:180,respawn:240}});
 const EPS=1e-7,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),copy=p=>({x:p.x,y:0,z:p.z});

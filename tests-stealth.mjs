@@ -15,4 +15,4 @@ w.reset();w.nextWave=Infinity;const nearby=l.bushes.find(b=>b.id===2),ca=Math.co
 console.log('PASS real crystal damage publishes the same reveal event');
 // Team-swapped, rotated input must give the same visibility decisions.
 const blue={id:1,team:'Light',alive:true,position:{...p}},red={id:2,team:'Dark',alive:true,position:{x:80,y:0,z:-80}},a=new StealthSystem(l.bushes,[blue,red]);const rotated=[{...blue,team:'Dark',position:{x:-p.x,y:0,z:-p.z}},{...red,team:'Light',position:{x:-80,y:0,z:80}}],b=new StealthSystem(l.bushes,rotated);assert.equal(a.canSee('Dark',blue),b.canSee('Light',rotated[0]));assert.equal(a.renderState(blue,'Light').opacity,b.renderState(rotated[0],'Dark').opacity);
-console.log('STEALTH 200.7 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.');
+console.log('STEALTH 200.8 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.');

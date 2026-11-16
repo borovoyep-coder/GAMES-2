@@ -1,7 +1,12 @@
 """Canonical MOBA forest topology and shared geometric surface contract (X/Z world)."""
 from __future__ import annotations
 import math
-TRAIL_WIDTH=1.8
+TRAIL_WIDTH=3.0
+GATE_WIDTH=3.0
+MOUNTAIN_WIDTH=3.8
+APPROACH_WIDTH=4.0
+DOOR_HALF_WIDTH=2.15
+BUSH_RADIUS=1.2
 BATTLE_RADIUS=6.8
 CAMP_RADII={1:5.1,2:5.2,3:5.2,4:5.1,5:4.0,6:5.0}
 ROOMS_BLUE=[
@@ -48,7 +53,7 @@ FOREST_BLUE=[
  room_link('Camp4',1,'South',2,[(-35,55.5),(-28,53),(-24,51)]),
  room_link('Camp4',0,'Camp5',0,[(-33,66),(-22,65),(-16,61)]),
  room_link('Camp5',2,'Camp6',0,[(4,57),(8,56),(12,56.2)]),
- leg('Camp6',2)+[(32,47),(31,41),(24,40),(18,36),(18,32)]]
+ leg('Camp6',2)+[(32,49),(28,43),(22,40),(18,36),(18,32)]]
 GATE_PATHS_BLUE=[PASSAGES_BLUE[7][2],PASSAGES_BLUE[1][2],FOREST_BLUE[9]]
 BUSH_BLUE=[]
 # Long central pockets, dry river bank pockets; the doorway grass is radial and narrow.
@@ -67,6 +72,48 @@ BUSH_BLUE += [
  ((-55,-72),-35,'boss',1.4,.9),((-72,-55),-55,'boss',1.4,.9)]
 # Additive grass is linked only to the nearby corridor, never across a room wall.
 BUSH_ACCESS_BLUE=[[(-22,15),(-24,13)]]
+# Two additional dry pockets at the exits of the central stone bridge.
+BUSH_BLUE += [((-10,5),45,'mid_shore',1.35,.9),((-5,10),45,'mid_shore',1.35,.9)]
+BUSH_BLUE=[(p,a,role,h,BUSH_RADIUS) for p,a,role,h,r in BUSH_BLUE]
+BUSH_ACCESS_BLUE += [[(-18,13),(-15,9),(-10,5)],[(-10,16),(-6,14),(-5,10)]]
+
+# Only these separator islands receive trees. Each accepted island holds 3–6
+# trees; all remaining unwalkable ground is a readable mossy rock/ruin mass.
+GROVE_ANCHORS=[(-14.7,32),(-5.3,32),
+ (-61,44),(-60,31),(-56,4),(-44,-3),(-29,-5),(-45,-25),(-24,31),(-34,65),(3,42),(7,68),(34,55),(1,29),
+ (-71,49),(-68,-7),(-61,-34),(-53,-25),(-42,-13),(-34,-13),(-23,-8),(-15,3),
+ (-55,26),(-35,27),(-25,36),(-4,31),(4,39),(8,47),(34,41),(40,62),(-24,64),(-58,62),(-67,64),(-35,40),
+ (-87,56),(-87,24),(-87,-8),(-87,-38),(-51,87),(-19,87),(13,87),(43,87),
+ (-70,0),(-41,36),(-21,57),(21,65),(-54,18),(-34,-23),(-7,24),(-16,-1),
+ (-73,58),(-69,68),(4,73),(46,73),(-73,-44),(-44,-35),(-17,-4),(-2,13),(-54,69),(-30,18),(-36,48),(-72,18)]
+
+def grove_clusters(plan):
+ """Deterministic compact plantings; positions never occupy a reserved floor."""
+ occupied=[];clusters=[]
+ for anchor in GROVE_ANCHORS:
+  candidates=[]
+  for iz in range(-4,5):
+   for ix in range(-4,5):
+    p=(anchor[0]+ix*.95,anchor[1]+iz*.95)
+    if math.dist(p,anchor)>4.4 or p[0]-p[1]>=-14.5 or max(map(abs,p))>93:continue
+    if plan.clearance(p)<1.40:continue
+    candidates.append(p)
+  candidates.sort(key=lambda p:(math.dist(p,anchor),p))
+  group=[];desired=6
+  for p in candidates:
+   if any(math.dist(p,q)<3.65 for q in occupied) or any(math.dist(p,q)<2.0 for q in group):continue
+   group.append(p)
+   if len(group)>=desired:break
+  if len(group)<3:continue
+  if len(occupied)+len(group)>248:break
+  clusters.append({'center':anchor,'points':group});occupied+=group
+ return clusters
+
+# Walls run up to the three permanent bridge decks; the two dynamic bridges
+# have wide openings aligned with their actual deck and bank approaches.
+SHORE_INTERVALS=[(-55,-29),(-21,-4),(4,21),(29,55)]
+SHORE_OFFSET=8.0
+SHORE_THICKNESS=1.0
 
 
 def mirrored_rooms():

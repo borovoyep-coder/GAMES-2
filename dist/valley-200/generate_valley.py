@@ -109,8 +109,8 @@ RIFT_SPAWNS=[('Watcher',xz((-18,-18))),('RiftRay',xz((18,18)))]
 TREE_ISLANDS_XZ=[(-61,44),(-60,31),(-56,4),(-44,-3),(-29,-5),(-45,-25),(-24,31),(-34,65),(3,42),(7,68),(34,55),(1,29),
  (-71,49),(-68,-7),(-61,-34),(-53,-25),(-42,-13),(-34,-13),(-23,-8),(-15,3),
  (-55,26),(-35,27),(-25,36),(-4,31),(4,39),(8,47),(34,41),(40,62),(-24,64),(-58,62),(-67,64),(-35,40)]
-MOUNTAIN_TOP_XZ=[(-92,50),(-92,35),(-92,5),(-92,-25),(-92,-47),(-85,-56),(-75,-65)]
-MOUNTAIN_NORTH_XZ=[(60,-92),(45,-92),(15,-92),(-15,-92),(-40,-92),(-55,-86),(-65,-75)]
+MOUNTAIN_TOP_XZ=[(-90,72),(-92,62),(-92,50),(-92,35),(-92,5),(-92,-25),(-92,-47),(-85,-56),(-75,-65)]
+MOUNTAIN_NORTH_XZ=[(70,-90),(60,-92),(45,-92),(15,-92),(-15,-92),(-40,-92),(-55,-86),(-65,-75)]
 MOUNTAIN_ROUTES=[route_xz(r) for r in [MOUNTAIN_TOP_XZ,MOUNTAIN_NORTH_XZ]]
 MOUNTAIN_ROUTES += [route_xz(mirrored(r)) for r in [MOUNTAIN_TOP_XZ,MOUNTAIN_NORTH_XZ]]
 MOUNTAIN_PASSAGES=[]
@@ -270,7 +270,7 @@ class Context:
         self.scene=bpy.data.scenes.new(SCENE_NAME)
         if bpy.context.window:bpy.context.window.scene=self.scene
         if temporary:bpy.data.scenes.remove(temporary)
-        self.scene["generator_version"]="5.0"
+        self.scene["generator_version"]="5.1"
         self.scene["seed"]=config.seed
         self.scene["playable_bounds"]=[-100,100,-100,100]
         self.scene["coordinate_system"]="Blender XY ground; Z up"
@@ -825,15 +825,15 @@ def create_crystal_gate(ctx,index,position,toward):
         root["blocks_shortcut"]=True
         root["side"]="Light" if index<=3 else "Dark"
         root["route_role"]=["mid_forest","magma_cut","semicircle"][(index-1)%3]
-        for j,(x,y,z,r,h) in enumerate([(0,0,0,.86,4.6),(-1.0,.10,0,.48,2.9),(.98,.10,0,.54,3.3),(-.40,-.65,0,.36,2.2),(.5,.55,0,.40,2.4)]):
+        for j,(x,y,z,r,h) in enumerate([(0,0,0,1.05,5.25),(-1.05,.12,0,.53,3.1),(1.02,.16,0,.58,3.6),(-.50,-.72,0,.41,2.4),(.58,.66,0,.44,2.7)]):
             obj=ctx.crystal("Destructible amethyst shard",(x,y,z),r,h,"Amethyst",(0,(j-2)*.13,j*.28));obj["rest_location"]=list(obj.location);obj["rest_rotation"]=list(obj.rotation_euler);obj["rest_scale"]=list(obj.scale)
         for shard in [o for o in root.children if 'rest_location' in o]:
             saved=ctx.parent;ctx.parent=shard
-            ctx.crystal('Amethyst neon internal core',(0,0,.32),.26,2.35,'AmethystCore')
+            ctx.crystal('Amethyst neon internal core',(0,0,.32),.30,2.65,'AmethystCore')
             ctx.parent=saved
         for j in range(12):
-            a=j*2.39996;r=1.5+(j%3)*.24
-            ctx.sphere('Crystal base scattered dark pebble',(math.cos(a)*r,math.sin(a)*r,-.02),(.27,.22,.19),'StoneDark',1)
+            a=j*2.39996;r=1.55+(j%3)*.24
+            ctx.sphere('Crystal base scattered dark pebble',(math.cos(a)*r,math.sin(a)*r,-.02),(.36,.30,.28),'StoneDark',2)
         for side in [-1,1]:
             # Стенки обрамляют затвор; сами кристаллы закрывают середину.
             for j in range(2):ctx.box("Crystal narrow passage sidewall",(side*(2.9+j*1.07),0,.55),(1.02,1.4,1.1),"Stone",.10)
@@ -1771,7 +1771,8 @@ def create_forest_materials(ctx):
         tex=nodes.new('ShaderNodeTexImage');tex.name='Surface painted detail';tex.image=image;tex.extension='REPEAT'
         uv=nodes.new('ShaderNodeTexCoord');mapping=nodes.new('ShaderNodeMapping');mapping.inputs['Scale'].default_value=(3,3,3);links.new(uv.outputs['UV'],mapping.inputs['Vector']);links.new(mapping.outputs['Vector'],tex.inputs['Vector'])
         mix=nodes.new('ShaderNodeMixRGB');mix.blend_type='MULTIPLY';mix.inputs[0].default_value=1;links.new(paint.outputs['Color'],mix.inputs[1]);links.new(tex.outputs['Color'],mix.inputs[2]);links.new(mix.outputs[0],shader.inputs['Base Color'])
-    painted_material(ctx,'AmethystCore','BF33FF','F0B0FF',.12,.10,3.8)
+    mat=painted_material(ctx,'AmethystCore','BF33FF','F0B0FF',.12,.10,3.8)
+    shader=next(n for n in mat.node_tree.nodes if n.type=='BSDF_PRINCIPLED');shader.inputs['Emission Strength'].driver_add('default_value').driver.expression='3.6+0.4*cos((frame-1)*0.075)'
 
 
 def make_route_pair(ctx,name,points,width=3.6,soil=True):
@@ -1868,13 +1869,13 @@ def create_bush(ctx,position,scale=1,variant=0,half_length=None,radius=None):
         root['concealment_zone']=True;root['trigger_radius']=radius;root['half_length']=half_length;root['trigger_shape']='capsule';root['allied_opacity']=.45
         rng=random.Random(ctx.cfg.seed+variant*997);verts=[];faces=[];colors=[]
         dark=srgb('35882E');mid=srgb('68B838');tip=srgb('8CE043')
-        for j in range(210):
+        for j in range(280):
             a=rng.uniform(0,2*PI);r=math.sqrt(rng.random())*radius*.91;cx=rng.uniform(-half_length,half_length)
             x=cx+math.cos(a)*r;y=math.sin(a)*r;theta=rng.uniform(0,2*PI);d=Vector((math.cos(theta),math.sin(theta),0));n=Vector((-d.y,d.x,0));h=rng.uniform(1.45,2.5);w=rng.uniform(.09,.19);base=Vector((x,y,0));k=len(verts)
-            for f,spread,bend in [(0,.40,0),(.34,1.0,.10),(.73,.63,.24),(1,0,.43)]:
+            for f,spread,bend in [(0,.40,0),(.24,1.0,.05),(.54,.82,.15),(.80,.48,.30),(1,0,.43)]:
                 for side in [-1,1]:
                     v=base+d*bend+n*w*spread*side+Vector((0,0,h*f));verts.append(tuple(v));colors.append(blend_color(dark,mid,min(1,f*2)) if f<.5 else blend_color(mid,tip,(f-.5)*2))
-            for row in range(3):faces.append((k+row*2,k+row*2+1,k+row*2+3,k+row*2+2))
+            for row in range(4):faces.append((k+row*2,k+row*2+1,k+row*2+3,k+row*2+2))
         obj=ctx.mesh('Tall grass tapered curved blades',verts,faces,'TallGrass',smooth_faces=True);paint_mesh(ctx,obj,colors,'TallGrass')
         obj.shape_key_add(name='Basis');wind=obj.shape_key_add(name='Wind bend')
         for item,v in zip(wind.data,obj.data.vertices):
