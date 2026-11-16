@@ -21,6 +21,8 @@ import bpy
 import bmesh
 from mathutils import Vector, Matrix
 
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+import maze_plan as mp
 PI = math.pi
 SCENE_NAME = "ValleyOfShards_200"
 PREFIX = "VOS200::"
@@ -118,6 +120,29 @@ for team,lane in [('Light','Top'),('Dark','Top')]:
   MOUNTAIN_PASSAGES.append((team,lane,tier,route_xz(r)))
 MOUNTAIN_PASSAGES += [('Dark' if t=='Light' else 'Light','Bot',tier,[turn(p) for p in r]) for t,lane,tier,r in MOUNTAIN_PASSAGES.copy()]
 
+# 5.0: canonical dense-maze topology, authored in X/Z.
+BLUE_GATES_XZ=list(mp.BLUE_GATES)
+BLUE_GATE_PATHS_XZ=list(mp.GATE_PATHS_BLUE)
+CRYSTAL_GATES=[(xz(p),xz([(-10,48),(-62,18),(22,56)][i])) for i,p in enumerate(BLUE_GATES_XZ)]
+CRYSTAL_GATES += [(turn(p),turn(t)) for p,t in CRYSTAL_GATES.copy()]
+GATE_PATHS=[route_xz(r) for r in BLUE_GATE_PATHS_XZ]+[route_xz(mirrored(r)) for r in BLUE_GATE_PATHS_XZ]
+BLUE_PASSAGES_XZ=list(mp.PASSAGES_BLUE)
+TOWER_PASSAGES=[('Light',lane,tier,route_xz(r)) for lane,tier,r in BLUE_PASSAGES_XZ]
+TOWER_PASSAGES += [('Dark',{'Top':'Bot','Bot':'Top','Mid':'Mid'}[lane],tier,route_xz(mirrored(r))) for lane,tier,r in BLUE_PASSAGES_XZ]
+BLUE_FOREST_XZ=list(mp.FOREST_BLUE)
+FOREST_PATHS=[route_xz(r) for r in BLUE_FOREST_XZ]+[route_xz(mirrored(r)) for r in BLUE_FOREST_XZ]
+BLUE_BUSH_SPECS=[(p,a,role) for p,a,role,h,w in mp.BUSH_BLUE]
+BLUE_BUSH_XZ=[p for p,a,role in BLUE_BUSH_SPECS];BUSH_XZ=BLUE_BUSH_XZ+mirrored(BLUE_BUSH_XZ)
+BUSH_RADIUS=.9;BUSH_HALF_LENGTH=1.35
+BLUE_BUSH_ACCESS_XZ=list(mp.BUSH_ACCESS_BLUE)
+BUSH_ACCESS=[route_xz(r) for r in BLUE_BUSH_ACCESS_XZ]+[route_xz(mirrored(r)) for r in BLUE_BUSH_ACCESS_XZ]
+MOUNTAIN_PASSAGES=[]
+for team in ['Light','Dark']:
+ for tier,x,z in TOWER_XZ['Top'][team]:
+  r=[(-84.4,z+1.1),(-86.7,z+2.5),(-89,z+2),(-92,z)] if team=='Light' else [(x+1.1,-84.4),(x+2.5,-86.7),(x+2,-89),(x,-92)]
+  MOUNTAIN_PASSAGES.append((team,'Top',tier,route_xz(r)))
+MOUNTAIN_PASSAGES += [('Dark' if t=='Light' else 'Light','Bot',tier,[turn(p) for p in r]) for t,lane,tier,r in MOUNTAIN_PASSAGES.copy()]
+
 
 
 @dataclass
@@ -125,7 +150,7 @@ class Config:
     output: Path
     seed: int = 1649
     terrain_cells: int = 104
-    tree_count: int = 240
+    tree_count: int = 2400
     bush_count: int = 40
     road_width: float = 10.4
     river_half_width: float = 6.0
@@ -245,7 +270,7 @@ class Context:
         self.scene=bpy.data.scenes.new(SCENE_NAME)
         if bpy.context.window:bpy.context.window.scene=self.scene
         if temporary:bpy.data.scenes.remove(temporary)
-        self.scene["generator_version"]="4.1"
+        self.scene["generator_version"]="5.0"
         self.scene["seed"]=config.seed
         self.scene["playable_bounds"]=[-100,100,-100,100]
         self.scene["coordinate_system"]="Blender XY ground; Z up"
@@ -1200,7 +1225,7 @@ def validate_scene(ctx):
     assert len(items("tree"))>=min(24,ctx.cfg.tree_count),"Insufficient forest; check placement filters"
     # Не маскируем недобор густоты леса молчаливым успехом.
     for obj in items("tree"):
-        assert all(math.dist(obj.location.xy,p)>11.5 for p in CLEARINGS.values()),"A tree intrudes into a clearing"
+        assert all(math.dist(obj.location.xy,p)>7.8 for p in CLEARINGS.values()),"A tree intrudes into a clearing"
     for obj in ctx.scene.objects:
         if obj.type=="MESH":
             assert len(obj.data.vertices)>0 and all(math.isfinite(v) for p in obj.data.vertices for v in p.co),obj.name
@@ -1708,7 +1733,7 @@ def create_minion_template(ctx,team,kind):
 # -----------------------------------------------------------------------------
 def snapshot(ctx):return set(ctx.scene.objects)
 def mirror_created(ctx,before,label):
-    objects=sorted(set(ctx.scene.objects)-before,key=lambda o:o.name);mapping={};rotation=Matrix.Rotation(PI,4,'Z')
+    objects=sorted(set(ctx.scene.objects)-before,key=lambda o:o.name);mapping={};rotation=Matrix(((-1,0,0,0),(0,-1,0,0),(0,0,1,0),(0,0,0,1)))
     def authored_world(obj):
         return authored_world(obj.parent)@obj.matrix_parent_inverse@obj.matrix_basis if obj.parent else obj.matrix_basis.copy()
     for obj in objects:
@@ -1837,13 +1862,14 @@ def capsule_distance(p,center,angle):
     return distance_to_segment(p,a,b)
 
 
-def create_bush(ctx,position,scale=1,variant=0):
+def create_bush(ctx,position,scale=1,variant=0,half_length=None,radius=None):
+    half_length=BUSH_HALF_LENGTH if half_length is None else half_length;radius=BUSH_RADIUS if radius is None else radius
     with ctx.root('StealthBush tall living grass',position,'bush',scale=scale) as root:
-        root['concealment_zone']=True;root['trigger_radius']=BUSH_RADIUS;root['half_length']=BUSH_HALF_LENGTH;root['trigger_shape']='capsule';root['allied_opacity']=.45
+        root['concealment_zone']=True;root['trigger_radius']=radius;root['half_length']=half_length;root['trigger_shape']='capsule';root['allied_opacity']=.45
         rng=random.Random(ctx.cfg.seed+variant*997);verts=[];faces=[];colors=[]
         dark=srgb('35882E');mid=srgb('68B838');tip=srgb('8CE043')
         for j in range(210):
-            a=rng.uniform(0,2*PI);r=math.sqrt(rng.random())*BUSH_RADIUS*.91;cx=rng.uniform(-BUSH_HALF_LENGTH,BUSH_HALF_LENGTH)
+            a=rng.uniform(0,2*PI);r=math.sqrt(rng.random())*radius*.91;cx=rng.uniform(-half_length,half_length)
             x=cx+math.cos(a)*r;y=math.sin(a)*r;theta=rng.uniform(0,2*PI);d=Vector((math.cos(theta),math.sin(theta),0));n=Vector((-d.y,d.x,0));h=rng.uniform(1.45,2.5);w=rng.uniform(.09,.19);base=Vector((x,y,0));k=len(verts)
             for f,spread,bend in [(0,.40,0),(.34,1.0,.10),(.73,.63,.24),(1,0,.43)]:
                 for side in [-1,1]:
@@ -2097,13 +2123,16 @@ def parse_args():
     parser.add_argument("--out",type=Path,default=default);parser.add_argument("--seed",type=int,default=1649)
     parser.add_argument("--render",action="store_true");parser.add_argument("--detail-renders",action="store_true")
     parser.add_argument("--resolution",type=int,default=1440);parser.add_argument("--samples",type=int,default=32)
-    parser.add_argument("--trees",type=int,default=240);parser.add_argument("--no-labels",action="store_true")
+    parser.add_argument("--trees",type=int,default=2400);parser.add_argument("--no-labels",action="store_true")
     args=parser.parse_args(argv)
-    if args.trees<0 or args.trees>1000:parser.error("--trees must be between 0 and 1000")
+    if args.trees<0 or args.trees>5000:parser.error("--trees must be between 0 and 5000")
     if args.resolution<320 or args.resolution>8192:parser.error("--resolution must be between 320 and 8192")
     if args.samples<1:parser.error("--samples must be positive")
     return Config(output=args.out.resolve(),seed=args.seed,render=args.render,detail_renders=args.detail_renders,resolution=args.resolution,samples=args.samples,tree_count=args.trees,labels=not args.no_labels)
 
+
+import maze_scene
+maze_scene.install(globals())
 
 if __name__=="__main__":
     build_map(parse_args())

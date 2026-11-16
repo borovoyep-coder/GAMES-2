@@ -1,0 +1,10 @@
+// Analytic projected colliders, shared with the exported Blender surface contract.
+export function segmentSquared(p,a,b){const dx=b[0]-a[0],dz=b[1]-a[1],t=Math.max(0,Math.min(1,((p.x-a[0])*dx+(p.z-a[1])*dz)/(dx*dx+dz*dz||1)));return (p.x-a[0]-dx*t)**2+(p.z-a[1]-dz*t)**2;}
+export function shapeContains(p,s,body=0){if(s.kind==='capsule'){const r=s.r-body;return r>=0&&segmentSquared(p,s.a,s.b)<=r*r+1e-9;}if(s.kind==='disc'){const r=s.r-body;return r>=0&&(p.x-s.p[0])**2+(p.z-s.p[1])**2<=r*r+1e-9;}const dx=p.x-s.p[0],dz=p.z-s.p[1],c=s.cos??Math.cos(s.angle),q=s.sin??Math.sin(s.angle);return Math.abs(dx*c+dz*q)<=s.hx-body+1e-9&&Math.abs(-dx*q+dz*c)<=s.hz-body+1e-9;}
+function bounds(s,padding=0){if(s.kind==='capsule'){const r=s.r+padding;return [Math.min(s.a[0],s.b[0])-r,Math.min(s.a[1],s.b[1])-r,Math.max(s.a[0],s.b[0])+r,Math.max(s.a[1],s.b[1])+r];}if(s.kind==='disc'){const r=s.r+padding;return [s.p[0]-r,s.p[1]-r,s.p[0]+r,s.p[1]+r];}if(s.kind==='rect'){const r=Math.hypot(s.hx,s.hz)+padding;return [s.p[0]-r,s.p[1]-r,s.p[0]+r,s.p[1]+r];}return [s.minX-padding,s.minZ-padding,s.maxX+padding,s.maxZ+padding];}
+export class SpatialIndex{
+ constructor(shapes,padding=0,tile=6){this.cells=new Map();this.tile=tile;for(const s of shapes){if(s.kind==='rect'){s.cos=Math.cos(s.angle);s.sin=Math.sin(s.angle);}const [x0,z0,x1,z1]=bounds(s,padding);for(let z=Math.floor(z0/tile);z<=Math.floor(z1/tile);z++)for(let x=Math.floor(x0/tile);x<=Math.floor(x1/tile);x++){const key=x+','+z,list=this.cells.get(key)??[];list.push(s);this.cells.set(key,list);}}}
+ near(p){return this.cells.get(Math.floor(p.x/this.tile)+','+Math.floor(p.z/this.tile))??[];}
+ contains(p,body=0){return this.near(p).some(s=>shapeContains(p,s,body));}
+}
+export function decodeRuns(runs,count){if(!Number.isInteger(count)||count<1||count>1000000)throw Error('Invalid navigation extent');const out=new Uint8Array(count);let end=0;for(const [start,length]of runs){if(!Number.isInteger(start)||!Number.isInteger(length)||length<1||start<end||start+length>count)throw Error('Invalid navigation run');out.fill(1,start,start+length);end=start+length;}return out;}

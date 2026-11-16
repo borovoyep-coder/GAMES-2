@@ -1,5 +1,5 @@
 PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, six gates and five bridges
-PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 735 meshes 3536152 vertices 2043152 triangles
+PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 735 meshes 3712736 vertices 2193808 triangles
 PASS 300 actor transforms, particle tracks and axis conversion
 PASS all six crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
 PASS descriptions, DOM bindings, local links, shader injection targets and source archive
@@ -12,7 +12,7 @@ PASS six crystals: six melee / eight ranged hits, attack cooldown, 60-second res
 PASS allied fountain healing/mana, enemy exclusion, trigger radius and maximum clamping
 PASS both bridge closures, both banks, ten smooth safe ejections; dry riverbank grass remains available
 PASS actual planar movement to a bush and physical boundary rejection
-GAMEPLAY 200.6 CHECKS PASSED
+GAMEPLAY 200.7 CHECKS PASSED
 
 PASS exact catalog: 22 forest + 2 rift + 2 bosses, spawn boundaries 0:20, 1:00, 3:00 and 7:00
 PASS 65-second group respawn after last wolf, synchronized restoration, 90-second rift respawn
@@ -22,25 +22,27 @@ PASS target priority minion → building → hero, no neutral targeting, no move
 PASS defensive 2-second aggro and immediate lane/range restriction
 PASS siege building hits, tower counterfire, planar projectiles and 1.5-second death lifetime
 PASS two-minute integration: balanced lane encounters; isolated siege/counterfire checked above, all units stay on their fixed lane and Y=0
-COMBAT 200.6 CHECKS PASSED; browser rendering not executed.
+COMBAT 200.7 CHECKS PASSED; browser rendering not executed.
 
 PASS actual Blender minion meshes: six templates, joints, walk/attack poses, four wheel rotations, cannon recoil and caster hover
 PASS 1.5-second death visibility, eight fragments, isolated fading materials, cleanup and CPU ray picking
-ANIMATION CPU 200.6 CHECKS PASSED; no browser/WebGL render executed.
+ANIMATION CPU 200.7 CHECKS PASSED; no browser/WebGL render executed.
 
 PASS exact independent coordinate tables: 18 towers, 12 camps, bases/arenas, four objective spawns, six gates and 40 grass pockets
-PASS all 167,281 mask cells and mirrored A* paths, reachable bushes/camps/arenas, 18 side paths and closed square perimeter
+PASS all 667,489 mask cells and mirrored A* paths, reachable bushes/camps/arenas, 18 side paths and closed square perimeter
 PASS all six crystal shortcuts actually shorten navigation after destruction
 PASS rotational minion formation and structure bypasses on every lane
-SYMMETRY 200.6 CHECKS PASSED
+SYMMETRY 200.7 CHECKS PASSED
 
 PASS immediate bush concealment, allied 0.45 opacity, opposing model hidden and independent hero materials
 PASS same-bush mutual sight, enemy exit, damage and ability reveal with 2-second duration and refresh
 PASS actual targeting filters, attack rejection, target reset and loss of homing shots for concealed heroes
 PASS real crystal damage publishes the same reveal event
-STEALTH 200.6 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.
+STEALTH 200.7 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.
 
-PASS forty capsule grass groups: assigned purposes, full footprints on dry ground, accessible interiors, narrow stealth triggers and exact partners
-PASS all twelve perpendicular tower links, four continuous mountain routes, arena access and explicit ruin/crag/retaining collision footprints
-PASS actual exported terrain/trail/clearing/grass colour streams, grass root-tip gradient and anchored wind shader hook
-FOREST 200.6 CHECKS PASSED; CPU/source verification; browser/WebGL not run.
+PASS halved trail widths, six exact gate positions, sixteen enclosed pockets and dense forest fill
+PASS all rooms reachable, narrow authorised doorways open, enclosing wall arcs and former empty-grass cuts impassable
+PASS all twelve battle entrances covered by grass and actual planar hero movement to all forty thickets
+PASS smooth side-tower curves, twelve mountain connections, baked collision samples and malformed run guards
+PASS neutral movement respects the same pocket walls
+FOREST 200.7 CHECKS PASSED; CPU verification; browser/WebGL not run.
