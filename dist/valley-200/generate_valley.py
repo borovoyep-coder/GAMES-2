@@ -52,12 +52,12 @@ RIVER_CONTROL=route_xz([(-112,-112),(-100,-100),(-75,-75),(-58,-58),(-25,-25),(0
 STONE_BRIDGES=[('Top',xz((-58,-58))),('Mid',(0,0)),('Bot',xz((58,58)))]
 ENERGY_BRIDGES=[('Dawn',xz((-25,-25))),('Dusk',xz((25,25)))]
 BRIDGE_ENTRIES_XZ=[(-32,-18),(18,32)]
-BLUE_GATES_XZ=[(-36,-6),(-68,8),(8,56)]
+BLUE_GATES_XZ=[(-18,28),(-68,8),(8,56)]
 BLUE_GATE_PATHS_XZ=[
- [(-30,30),(-37,19),(-34,6),(-36,-6),(-32,-18)],
+ [(-23,23),(-18,28),(-12,34),(-12,42)],
  [(-73,5),(-68,8),(-65,14),(-65,19)],
  [(-6,54),(0,56),(8,56),(15,56),(18,52)]]
-CRYSTAL_GATES=[(xz(p),xz([(-32,-18),(-62,18),(22,56)][i])) for i,p in enumerate(BLUE_GATES_XZ)]
+CRYSTAL_GATES=[(xz(p),xz([(-12,42),(-62,18),(22,56)][i])) for i,p in enumerate(BLUE_GATES_XZ)]
 CRYSTAL_GATES += [(turn(p),turn(t)) for p,t in CRYSTAL_GATES.copy()]
 GATE_PATHS=[route_xz(r) for r in BLUE_GATE_PATHS_XZ]+[route_xz(mirrored(r)) for r in BLUE_GATE_PATHS_XZ]
 SOLAR_APPROACHES_XZ=[
@@ -80,16 +80,44 @@ BLUE_FOREST_XZ=[
  [(-45,59),(-39,56),(-30,49),(-12,48),(-6,52),(8,56),(18,52),(26,44),(18,32)],
  [(-15,62),(-9,61)],[(-18,10),(-12,30),(-12,48)]]
 FOREST_PATHS=[route_xz(r) for r in BLUE_FOREST_XZ]+[route_xz(mirrored(r)) for r in BLUE_FOREST_XZ]
-BLUE_BUSH_XZ=[(-12,-4),(-24,16),(-26,-24),(-38,-12),(-66,-15),(-52,2),(-45,24),(-64,32),(-28,42),(-15,66),(12,68),(-55,-72),(-72,-55)]
+# Capsule-shaped tall grass: (X/Z centre, long-axis angle degrees, purpose).
+BLUE_BUSH_SPECS=[
+ ((-24,11),-45,'mid'),((-10,29),-45,'mid'),
+ ((-36,-19),45,'river'),((17,34),45,'river'),
+ ((-55,2),-25,'clearing_west'),((-43,24),20,'clearing_west'),((-38,14),-45,'clearing_west'),
+ ((-23,42),35,'clearing_south'),((-16,61),0,'clearing_south'),((-1,44),-30,'clearing_south'),
+ ((-60,28),0,'magma'),((-48,65),15,'azure'),((0,65),0,'centipedes'),
+ ((-68,33),90,'side_turn'),((-31,70),0,'side_turn'),((-73,18),90,'side_turn'),
+ ((-64,-22),30,'wolves'),((32,56),90,'crab'),
+ ((-55,-72),-35,'boss'),((-72,-55),-55,'boss')]
+BLUE_BUSH_XZ=[p for p,angle,role in BLUE_BUSH_SPECS]
 BUSH_XZ=BLUE_BUSH_XZ+mirrored(BLUE_BUSH_XZ)
-# Short grass access links add no extra crossings or shortcuts across a crystal.
-BLUE_BUSH_ACCESS_XZ=[[(-58,-12),(-66,-15)],[(-30,49),(-28,42)],[(18,68),(12,68)],[(-18,10),(-24,16)],[(-18,10),(-12,-4)]]
+BUSH_HALF_LENGTH=2.6;BUSH_RADIUS=1.35
+BLUE_BUSH_ACCESS_XZ=[
+ [(-26,20),(-24,11)],[(-12,30),(-10,29)],[(-32,-18),(-36,-19)],[(18,32),(17,34)],
+ [(-48,12),(-55,2)],[(-48,12),(-43,24)],[(-48,12),(-38,14)],
+ [(-12,48),(-23,42)],[(-15,62),(-16,61)],[(-12,48),(-1,44)],
+ [(-62,24),(-60,28)],[(-45,59),(-48,65)],[(-9,61),(0,65)],
+ [(-62,35),(-68,33)],[(-45,76),(-31,70)],[(-73,23),(-73,18)],
+ [(-61,-25),(-64,-22)],[(26,44),(32,56)],
+ [(-55,-72),(-59,-77)],[(-72,-55),(-77,-59)]]
 BUSH_ACCESS=[route_xz(r) for r in BLUE_BUSH_ACCESS_XZ]+[route_xz(mirrored(r)) for r in BLUE_BUSH_ACCESS_XZ]
-# Permanent shoreline tongues support the exact bush next to each forest bridge.
-BLUE_LANDING_XZ=[(-32,-18),(-26,-24)]
-RIVER_LANDINGS=[route_xz(BLUE_LANDING_XZ),route_xz(mirrored(BLUE_LANDING_XZ))]
+RIVER_LANDINGS=[]  # No artificial grass islands or shoreline tongues inside the water.
 RIFT_SPAWNS=[('Watcher',xz((-18,-18))),('RiftRay',xz((18,18)))]
-TREE_ISLANDS_XZ=[(-61,44),(-60,31),(-56,4),(-44,-3),(-29,-5),(-45,-25),(-24,31),(-34,65),(3,42),(7,68),(34,55),(1,29)]
+TREE_ISLANDS_XZ=[(-61,44),(-60,31),(-56,4),(-44,-3),(-29,-5),(-45,-25),(-24,31),(-34,65),(3,42),(7,68),(34,55),(1,29),
+ (-71,49),(-68,-7),(-61,-34),(-53,-25),(-42,-13),(-34,-13),(-23,-8),(-15,3),
+ (-55,26),(-35,27),(-25,36),(-4,31),(4,39),(8,47),(34,41),(40,62),(-24,64),(-58,62),(-67,64),(-35,40)]
+MOUNTAIN_TOP_XZ=[(-92,50),(-92,35),(-92,5),(-92,-25),(-92,-47),(-85,-56),(-75,-65)]
+MOUNTAIN_NORTH_XZ=[(60,-92),(45,-92),(15,-92),(-15,-92),(-40,-92),(-55,-86),(-65,-75)]
+MOUNTAIN_ROUTES=[route_xz(r) for r in [MOUNTAIN_TOP_XZ,MOUNTAIN_NORTH_XZ]]
+MOUNTAIN_ROUTES += [route_xz(mirrored(r)) for r in [MOUNTAIN_TOP_XZ,MOUNTAIN_NORTH_XZ]]
+MOUNTAIN_PASSAGES=[]
+for team,lane in [('Light','Top'),('Dark','Top')]:
+ for tier,x,z in TOWER_XZ[lane][team]:
+  r=[(x-5.5,z),(-92,z)] if team=='Light' else [(x,z-5.5),(x,-92)]
+  MOUNTAIN_PASSAGES.append((team,lane,tier,route_xz(r)))
+MOUNTAIN_PASSAGES += [('Dark' if t=='Light' else 'Light','Bot',tier,[turn(p) for p in r]) for t,lane,tier,r in MOUNTAIN_PASSAGES.copy()]
+
 
 
 @dataclass
@@ -97,10 +125,10 @@ class Config:
     output: Path
     seed: int = 1649
     terrain_cells: int = 104
-    tree_count: int = 72
-    bush_count: int = 26
+    tree_count: int = 240
+    bush_count: int = 40
     road_width: float = 10.4
-    river_half_width: float = 4.8
+    river_half_width: float = 6.0
     resolution: int = 1440
     samples: int = 32
     render: bool = False
@@ -195,7 +223,8 @@ class Context:
         self.paths += [[BASES[t],FOUNTAINS[t]] for t in BASES]
         self.gates=[catmull(r,3) for r in GATE_PATHS]
         self.paths+=self.gates
-        self.paths += [catmull(r,3) for r in BUSH_ACCESS+RIVER_LANDINGS]
+        self.paths += [catmull(r,3) for r in BUSH_ACCESS+MOUNTAIN_ROUTES]
+        self.paths += [catmull(r,3) for _,_,_,r in MOUNTAIN_PASSAGES]
         # Повторный запуск заменяет ТОЛЬКО сцену/блоки данных нашего namespace.
         temporary=None
         if bpy.context.window and bpy.context.window.scene.name==SCENE_NAME:
@@ -204,17 +233,19 @@ class Context:
             bpy.context.window.scene=other
         scene=bpy.data.scenes.get(SCENE_NAME)
         if scene:bpy.data.scenes.remove(scene)
-        for obj in list(bpy.data.objects):
-            if obj.name.startswith(PREFIX):bpy.data.objects.remove(obj,do_unlink=True)
+        # Delete the generated namespace in one transaction; per-object deletion
+        # repeatedly reevaluates thousands of animated grass/dependency nodes.
+        owned=[obj for obj in bpy.data.objects if obj.name.startswith(PREFIX)]
+        if owned:bpy.data.batch_remove(ids=owned)
         for collection in list(bpy.data.collections):
             if collection.name.startswith(PREFIX):bpy.data.collections.remove(collection)
         for blocks in [bpy.data.meshes,bpy.data.curves,bpy.data.materials,bpy.data.cameras,bpy.data.lights,bpy.data.worlds,bpy.data.actions]:
-            for block in list(blocks):
-                if block.name.startswith(PREFIX) and block.users==0:blocks.remove(block)
+            unused=[block for block in blocks if block.name.startswith(PREFIX) and block.users==0]
+            if unused:bpy.data.batch_remove(ids=unused)
         self.scene=bpy.data.scenes.new(SCENE_NAME)
         if bpy.context.window:bpy.context.window.scene=self.scene
         if temporary:bpy.data.scenes.remove(temporary)
-        self.scene["generator_version"]="4.0"
+        self.scene["generator_version"]="4.1"
         self.scene["seed"]=config.seed
         self.scene["playable_bounds"]=[-100,100,-100,100]
         self.scene["coordinate_system"]="Blender XY ground; Z up"
@@ -340,6 +371,9 @@ class Context:
 
     def height(self,x,y):
         p=(x,y);rd=route_distance(p,self.river)
+        # The unwalkable outer verge drops away below the narrow mountain ledges.
+        if abs(y)<64 and abs(x)>95:return -7.0*smooth(95,97,abs(x))
+        if abs(x)<64 and abs(y)>95:return -7.0*smooth(95,97,abs(y))
         if rd<self.cfg.river_half_width+1.5:
             return -2.4*(1-smooth(self.cfg.river_half_width-.4,self.cfg.river_half_width+1.5,rd))
         return 0.0  # Visual walkable ground is flat; only the non-walkable river bed is recessed.
@@ -403,7 +437,7 @@ def water_material(ctx,name,dark,light,outer=False):
 
 def create_materials(ctx):
     specs={
-        "Grass":("427C38","A0BF5B",.92,0,0), "Moss":("387F3D","A1C75A",.9,0,0),
+        "Grass":("3E6B2C","528738",.92,0,0), "Moss":("387F3D","A1C75A",.9,0,0),
         "Earth":("695035","B49663",.98,0,0), "EarthEdge":("5B4939","957449",.93,0,0),
         "Lane":("B6A185","E6D5B7",.76,0,0), "LaneLight":("C3AF93","EDDFC6",.75,0,0),
         "LaneWarm":("A9967E","D6C0A5",.78,0,0), "LaneJoint":("655E50","9B8D70",.95,0,0),
@@ -417,12 +451,12 @@ def create_materials(ctx):
         "HeroRed":("6A233A","BF5260",.66,.15,0),
         "GrassBlade":("4E8D39","BAD36A",.88,0,0), "FlowerBlue":("597BB9","BCDEF1",.72,0,.05),
         "FlowerCream":("D0AB5A","FFF2AD",.73,0,0),
-        "PineDark":("143D31","296A43",.94,0,0), "Pine":("246C3F","4C9250",.9,0,0),
-        "PineLight":("468644","87B65B",.87,0,0), "Bush":("4B8D2E","B8D94C",.89,0,0),
+        "PineDark":("152C18","1B3B1E",.94,0,0), "Pine":("1B3B1E","224726",.9,0,0),
+        "PineLight":("224726","27522B",.87,0,0), "Bush":("4B8D2E","B8D94C",.89,0,0),
         "BushTip":("85AD35","E0EA72",.84,0,0),
         "BlueCrystal":("086AAB","39CFFF",.20,.16,2.5),
         "RedCrystal":("A7092D","FF3C55",.20,.15,1.45),
-        "Amethyst":("5825A3","BD54F6",.22,.22,1.45),
+        "Amethyst":("6222AB","C259FF",.19,.24,1.75),
         "SunGlow":("D99020","FFF0AC",.22,.15,2.0),
         "GoldEnergy":("DFAD35","FFF3B2",.24,.05,2.2),
         "BlueEnergy":("287FCA","9BEDFF",.15,.05,1.7),
@@ -453,6 +487,7 @@ def create_terrain(ctx):
     ground=ctx.mesh("PlayableTerrain_200x200",vertices,faces,"Grass",smooth_faces=True)
     bm=bmesh.new();bm.from_mesh(ground.data);bm.normal_update();bmesh.ops.reverse_faces(bm,faces=[f for f in bm.faces if f.normal.z<0]);bm.to_mesh(ground.data);bm.free();ground.data.update()
     ground["category"]="playable_terrain";ground["width"]=200;ground["height"]=200
+    paint_mesh(ctx,ground,[forest_color(v.co.x,v.co.y) for v in ground.data.vertices],"ForestGround")
     # Вертикальная толща острова — отдельный меш, не растягивает игровую землю.
     for side in range(4):
         verts=[];fs=[]
@@ -764,9 +799,16 @@ def create_crystal_gate(ctx,index,position,toward):
         root["gate_index"]=index;root["durability"]=24.0;root["respawn_seconds"]=60.0
         root["blocks_shortcut"]=True
         root["side"]="Light" if index<=3 else "Dark"
-        root["route_role"]=["mid_bridge","magma_cut","semicircle"][(index-1)%3]
+        root["route_role"]=["mid_forest","magma_cut","semicircle"][(index-1)%3]
         for j,(x,y,z,r,h) in enumerate([(0,0,0,.86,4.6),(-1.0,.10,0,.48,2.9),(.98,.10,0,.54,3.3),(-.40,-.65,0,.36,2.2),(.5,.55,0,.40,2.4)]):
             obj=ctx.crystal("Destructible amethyst shard",(x,y,z),r,h,"Amethyst",(0,(j-2)*.13,j*.28));obj["rest_location"]=list(obj.location);obj["rest_rotation"]=list(obj.rotation_euler);obj["rest_scale"]=list(obj.scale)
+        for shard in [o for o in root.children if 'rest_location' in o]:
+            saved=ctx.parent;ctx.parent=shard
+            ctx.crystal('Amethyst neon internal core',(0,0,.32),.26,2.35,'AmethystCore')
+            ctx.parent=saved
+        for j in range(12):
+            a=j*2.39996;r=1.5+(j%3)*.24
+            ctx.sphere('Crystal base scattered dark pebble',(math.cos(a)*r,math.sin(a)*r,-.02),(.27,.22,.19),'StoneDark',1)
         for side in [-1,1]:
             # Стенки обрамляют затвор; сами кристаллы закрывают середину.
             for j in range(2):ctx.box("Crystal narrow passage sidewall",(side*(2.9+j*1.07),0,.55),(1.02,1.4,1.1),"Stone",.10)
@@ -1667,35 +1709,72 @@ def create_minion_template(ctx,team,kind):
 def snapshot(ctx):return set(ctx.scene.objects)
 def mirror_created(ctx,before,label):
     objects=sorted(set(ctx.scene.objects)-before,key=lambda o:o.name);mapping={};rotation=Matrix.Rotation(PI,4,'Z')
-    ctx.scene.view_layers[0].update()
+    def authored_world(obj):
+        return authored_world(obj.parent)@obj.matrix_parent_inverse@obj.matrix_basis if obj.parent else obj.matrix_basis.copy()
     for obj in objects:
         copy=obj.copy();copy.name=obj.name+' mirrored'
         for c in obj.users_collection:c.objects.link(copy)
         mapping[obj]=copy
     for obj,copy in mapping.items():
         if obj.parent in mapping:copy.parent=mapping[obj.parent];copy.matrix_basis=obj.matrix_basis.copy()
-        else:copy.parent=None;copy.matrix_world=rotation@obj.matrix_world
+        else:copy.parent=None;copy.matrix_world=rotation@authored_world(obj)
         obj['symmetric_partner']=copy.name;copy['symmetric_partner']=obj.name
         ctx.registry.setdefault('symmetric_pairs',[]).append((obj.name,copy.name))
     return mapping
 
 
-def make_route_pair(ctx,name,points,width=3.6,soil=False):
+# 4.1 forest surface / vegetation module. All canonical instances get an exact companion.
+def blend_color(a,b,t):return tuple(a[i]*(1-t)+b[i]*t for i in range(3))
+def forest_color(x,y):
+    f=.5+.23*math.cos(x*.17+y*.09)+.18*math.cos(y*.32-x*.13)
+    return blend_color(srgb('3E6B2C'),srgb('528738'),max(0,min(1,f)))
+
+def paint_mesh(ctx,obj,colors,material='TrailBlend'):
+    obj.data.materials.clear();obj.data.materials.append(ctx.materials[material])
+    attr=obj.data.color_attributes.new(name='ValleyPaint',type='FLOAT_COLOR',domain='POINT')
+    for item,c in zip(attr.data,colors):item.color=(*c,1)
+    obj['painted_surface']=True
+    return obj
+
+def create_forest_materials(ctx):
+    for name in ['ForestGround','TrailBlend','ClearingBlend','TallGrass']:
+        mat=painted_material(ctx,name,'3E6B2C','C49A6C',.94)
+        nodes=mat.node_tree.nodes;links=mat.node_tree.links;shader=next(n for n in nodes if n.type=='BSDF_PRINCIPLED')
+        paint=nodes.new('ShaderNodeVertexColor');paint.layer_name='ValleyPaint';paint.name='Authored ground and leaf colours'
+        links.new(paint.outputs['Color'],shader.inputs['Base Color'])
+        image=next(i for i in bpy.data.images if i.name==PREFIX+('painted_foliage' if name=='TallGrass' else 'painted_earth'))
+        tex=nodes.new('ShaderNodeTexImage');tex.name='Surface painted detail';tex.image=image;tex.extension='REPEAT'
+        uv=nodes.new('ShaderNodeTexCoord');mapping=nodes.new('ShaderNodeMapping');mapping.inputs['Scale'].default_value=(3,3,3);links.new(uv.outputs['UV'],mapping.inputs['Vector']);links.new(mapping.outputs['Vector'],tex.inputs['Vector'])
+        mix=nodes.new('ShaderNodeMixRGB');mix.blend_type='MULTIPLY';mix.inputs[0].default_value=1;links.new(paint.outputs['Color'],mix.inputs[1]);links.new(tex.outputs['Color'],mix.inputs[2]);links.new(mix.outputs[0],shader.inputs['Base Color'])
+    painted_material(ctx,'AmethystCore','BF33FF','F0B0FF',.12,.10,3.8)
+
+
+def make_route_pair(ctx,name,points,width=3.6,soil=True):
     before=snapshot(ctx)
     if soil:create_flat_soil(ctx,name,points,width)
     else:create_small_paving(ctx,name,points,width)
     mirror_created(ctx,before,name)
 
 
-def create_flat_soil(ctx,name,points,width=2.8):
-    points=path_samples(catmull(points,3),.8);v=[];faces=[];level=.10+ctx.path_layer*.000531;ctx.path_layer+=1
+def create_flat_soil(ctx,name,points,width=3.6):
+    points=path_samples(catmull(points,4),.85);v=[];faces=[];colors=[]
+    level=.055+ctx.path_layer*.00031;ctx.path_layer+=1
+    fractions=[-1,-.82,-.55,0,.55,.82,1];soil=srgb('C49A6C')
     for i,p in enumerate(points):
         a=Vector(points[max(0,i-1)]);b=Vector(points[min(len(points)-1,i+1)]);d=(b-a).normalized();n=Vector((-d.y,d.x))
-        for side in [-1,1]:v.append((p[0]+n.x*width*.5*side,p[1]+n.y*width*.5*side,level))
-        if i:k=len(v)-4;faces.append((k,k+2,k+3,k+1))
-    obj=ctx.mesh(name,v,faces,'Earth')
-    bm=bmesh.new();bm.from_mesh(obj.data);bm.normal_update();bmesh.ops.reverse_faces(bm,faces=[f for f in bm.faces if f.normal.z<0]);bm.to_mesh(obj.data);bm.free();obj.data.update()
-    return obj
+        for f in fractions:
+            # A continuous painted verge; outermost colour matches underlying grass.
+            wiggle=.10*math.sin(i*.71)+.07*math.sin(i*1.31)
+            off=f*(width/2+.95+wiggle);x=p[0]+n.x*off;y=p[1]+n.y*off
+            v.append((x,y,level))
+            edge=smooth(.48,1,abs(f));variation=.95+.045*math.cos(i*.43+f*2.8)
+            colors.append(blend_color(tuple(c*variation for c in soil),forest_color(x,y),edge))
+        if i:
+            for j in range(len(fractions)-1):
+                k=(i-1)*len(fractions)+j;mid=((points[i-1][0]+p[0])*.5,(points[i-1][1]+p[1])*.5)
+                if route_distance(mid,ctx.river)>ctx.cfg.river_half_width+1.35:faces.append((k,k+len(fractions),k+len(fractions)+1,k+1))
+    obj=ctx.mesh(name,v,faces,'TrailBlend',smooth_faces=True);paint_mesh(ctx,obj,colors)
+    obj['surface_type']='warm_ochre_trail';obj['walkable_width']=width;return obj
 
 
 def create_symmetric_lanes(ctx):
@@ -1704,66 +1783,141 @@ def create_symmetric_lanes(ctx):
 
 
 def create_symmetric_routes(ctx):
-    for i,r in enumerate(BLUE_FOREST_XZ):make_route_pair(ctx,f'Paved forest arc {i+1}',route_xz(r))
-    for i,r in enumerate(BLUE_GATE_PATHS_XZ):make_route_pair(ctx,f'Crystal controlled shortcut {i+1}',route_xz(r),3.5)
-    for lane,tier,r in BLUE_PASSAGES_XZ:make_route_pair(ctx,f'Blue {lane} T{tier} straight side passage',route_xz(r))
-    for i,r in enumerate(SOLAR_APPROACHES_XZ):make_route_pair(ctx,f'Broad permanent arena ramp {i+1}',route_xz(r),8)
-    make_route_pair(ctx,'Fountain access',[BASES['Light'],FOUNTAINS['Light']],5.4)
-    for i,r in enumerate(BLUE_BUSH_ACCESS_XZ):make_route_pair(ctx,f'Grass pocket access {i+1}',route_xz(r),3.6,True)
-    make_route_pair(ctx,'River bush shore tongue',RIVER_LANDINGS[0],3.5,True)
-    before=snapshot(ctx);ctx.group('RiverShoreIslands')
-    for p in [xz((-12,-4)),xz((-26,-24))]:ctx.cylinder('Permanent bush shore island',(p[0],p[1],.03),3.65,.27,'Earth',48,.03)
-    mirror_created(ctx,before,'Shore bush islands')
+    ctx.group('ForestTrails')
+    for i,r in enumerate(BLUE_FOREST_XZ):make_route_pair(ctx,f'Natural worn woodland arc {i+1}',route_xz(r))
+    for i,r in enumerate(BLUE_GATE_PATHS_XZ):make_route_pair(ctx,f'Earth crystal controlled shortcut {i+1}',route_xz(r),3.5)
+    for lane,tier,r in BLUE_PASSAGES_XZ:make_route_pair(ctx,f'{lane} T{tier} forest soil passage',route_xz(r))
+    for i,r in enumerate(SOLAR_APPROACHES_XZ):make_route_pair(ctx,f'Wide ochre arena approach {i+1}',route_xz(r),8)
+    make_route_pair(ctx,'Fountain tiled access',[BASES['Light'],FOUNTAINS['Light']],5.4,False)
+    for i,r in enumerate(BLUE_BUSH_ACCESS_XZ):make_route_pair(ctx,f'Tall grass pocket access {i+1}',route_xz(r),3.6)
 
 
-def create_bush(ctx,position,scale=1,variant=0):
-    with ctx.root('StealthBush grouped foliage',position,'bush',scale=scale) as root:
-        root['concealment_zone']=True;root['trigger_radius']=3.2;root['allied_opacity']=.45
-        for j in range(7):
-            a=j*2.39996;r=.15 if j==0 else 1.15
-            ctx.sphere('Bush deep emerald root crown',(math.cos(a)*r,math.sin(a)*r,.55),(.96,.90,.68),'Emerald',2)
-            ctx.sphere('Bush bright lime leaf tip crown',(math.cos(a)*r*.9,math.sin(a)*r*.9,1.17+(j%3)*.18),(.96,.84,.73),'MintLeaf',2)
-        for j in range(20):
-            a=j*2.39996;ctx.crystal('Bush gracefully folded light leaf',(math.cos(a)*1.45,math.sin(a)*1.45,1.0),.17,.85,'MintLeaf',(math.sin(a)*.6,math.cos(a)*.6,a))
+def create_mountain_trails(ctx):
+    ctx.group('MountainTrails')
+    for i,points in enumerate(MOUNTAIN_ROUTES[:2]):
+        before=snapshot(ctx);create_flat_soil(ctx,f'Outer shared mountain trail {i+1}',points,4.6)
+        line=path_samples(catmull(points,5),3.8)
+        for j,(a,b) in enumerate(zip(line,line[1:])):
+            d=(Vector(b)-Vector(a)).normalized();n=Vector((-d.y,d.x));p=(Vector(a)+Vector(b))*.5
+            # Select the verge which faces the abyss, keeping the inner route clear.
+            if n.dot(p)<0:n=-n
+            q=p+n*3.65;angle=math.atan2(d.y,d.x);length=math.dist(a,b)
+            ctx.box('Mountain ledge exposed rock foundation',(p.x,p.y,-3.1),(length+.25,6.6,6.0),'Stone',.11,angle)
+            for row in range(2):ctx.box('Cliffside bevelled retaining masonry',(q.x,q.y,-.18+row*.43),(length-.10,1.15,.42),'Stone',.07,angle)
+            if j%3==0:
+                rock=create_rock(ctx,'Mountain outer buttress',(q.x,q.y,-2.2),(1.7,1.55,4.0),seed=640+i*100+j)
+            rail=ctx.box('Mountain retaining collision',(q.x,q.y,.6),(length,1.0,2.0),'Stone',0,angle);rail.hide_render=True;rail['physics_only']=True;rail['obstacle_collider']=True;rail['obstacle_kind']='retaining'
+        mirror_created(ctx,before,'Outer mountain ledges')
+    for team,lane,tier,r in MOUNTAIN_PASSAGES[:6]:make_route_pair(ctx,f'{team} {lane} T{tier} perpendicular mountain link',r,3.6)
+
+
+def create_clearing(ctx,name,position):
+    ctx.group('Clearings')
+    with ctx.root('Clearing '+name,(*position,0),'clearing') as root:
+        root['radius']=10.5;v=[(0,0,.065)];colors=[];faces=[];n=72;radii=[0,2.5,5,7.5,9.6,10.6,11.7]
+        def color(x,y,r):
+            world=(position[0]+x,position[1]+y);f=.50+.28*math.cos(world[0]*.45+world[1]*.23)+.19*math.cos(world[1]*.61-world[0]*.18)
+            patch=blend_color(srgb('9BB068'),srgb('C49A6C'),max(0,min(1,f)))
+            return blend_color(patch,forest_color(*world),smooth(9.4,11.7,r))
+        colors.append(color(0,0,0))
+        for row,r in enumerate(radii[1:]):
+            for j in range(n):
+                a=j*2*PI/n;x=math.cos(a)*r;y=math.sin(a)*r;v.append((x,y,.065));colors.append(color(x,y,r))
+                if row==0:faces.append((0,1+j,1+(j+1)%n))
+                else:
+                    k=1+(row-1)*n+j;faces.append((k,1+row*n+j,1+row*n+(j+1)%n,1+(row-1)*n+(j+1)%n))
+        obj=ctx.mesh('Mottled trampled earth and meadow',v,faces,'ClearingBlend',smooth_faces=True);paint_mesh(ctx,obj,colors,'ClearingBlend')
+        for j in range(12):
+            a=j*2*PI/12;ctx.sphere('Low mossy clearing edge stone',(11.5*math.cos(a),11.5*math.sin(a),.10),(.22,.19,.12),'Moss',1)
         return root
 
 
+def capsule_distance(p,center,angle):
+    d=(math.cos(angle),math.sin(angle));a=(center[0]-d[0]*BUSH_HALF_LENGTH,center[1]-d[1]*BUSH_HALF_LENGTH);b=(center[0]+d[0]*BUSH_HALF_LENGTH,center[1]+d[1]*BUSH_HALF_LENGTH)
+    return distance_to_segment(p,a,b)
+
+
+def create_bush(ctx,position,scale=1,variant=0):
+    with ctx.root('StealthBush tall living grass',position,'bush',scale=scale) as root:
+        root['concealment_zone']=True;root['trigger_radius']=BUSH_RADIUS;root['half_length']=BUSH_HALF_LENGTH;root['trigger_shape']='capsule';root['allied_opacity']=.45
+        rng=random.Random(ctx.cfg.seed+variant*997);verts=[];faces=[];colors=[]
+        dark=srgb('35882E');mid=srgb('68B838');tip=srgb('8CE043')
+        for j in range(210):
+            a=rng.uniform(0,2*PI);r=math.sqrt(rng.random())*BUSH_RADIUS*.91;cx=rng.uniform(-BUSH_HALF_LENGTH,BUSH_HALF_LENGTH)
+            x=cx+math.cos(a)*r;y=math.sin(a)*r;theta=rng.uniform(0,2*PI);d=Vector((math.cos(theta),math.sin(theta),0));n=Vector((-d.y,d.x,0));h=rng.uniform(1.45,2.5);w=rng.uniform(.09,.19);base=Vector((x,y,0));k=len(verts)
+            for f,spread,bend in [(0,.40,0),(.34,1.0,.10),(.73,.63,.24),(1,0,.43)]:
+                for side in [-1,1]:
+                    v=base+d*bend+n*w*spread*side+Vector((0,0,h*f));verts.append(tuple(v));colors.append(blend_color(dark,mid,min(1,f*2)) if f<.5 else blend_color(mid,tip,(f-.5)*2))
+            for row in range(3):faces.append((k+row*2,k+row*2+1,k+row*2+3,k+row*2+2))
+        obj=ctx.mesh('Tall grass tapered curved blades',verts,faces,'TallGrass',smooth_faces=True);paint_mesh(ctx,obj,colors,'TallGrass')
+        obj.shape_key_add(name='Basis');wind=obj.shape_key_add(name='Wind bend')
+        for item,v in zip(wind.data,obj.data.vertices):
+            f=max(0,v.co.z/2.5);item.co.x+=.19*f*f;item.co.y+=.08*f*f
+        wind.driver_add('value').driver.expression='0.5-0.5*cos((frame-1)*0.08)'
+        return root
+
+
+def forest_obstacle_clear(ctx,p,margin=1.0):
+    if max(abs(p[0]),abs(p[1]))>87:return False
+    if route_distance(p,ctx.river)<ctx.cfg.river_half_width+margin+1.5:return False
+    if min(route_distance(p,r) for r in ctx.lanes.values())<ctx.cfg.road_width/2+margin+.7:return False
+    if min(route_distance(p,r) for r in ctx.paths)<1.8+margin:return False
+    if any(math.dist(p,c)<10.9+margin for c in CLEARINGS.values()):return False
+    if any(math.dist(p,c)<15.7+margin for c in list(BASES.values())+list(BOSSES.values())):return False
+    if any(math.dist(p,c)<7+margin for c in FOUNTAINS.values()):return False
+    if any(math.dist(p,c)<5.5+margin for _,_,c in CAMPS):return False
+    if any(math.dist(p,c)<2.8+margin for c,_ in CRYSTAL_GATES):return False
+    for center,angle,role in BLUE_BUSH_SPECS:
+        if min(capsule_distance(p,xz(center),-math.radians(angle)),capsule_distance(turn(p),xz(center),-math.radians(angle)))<BUSH_RADIUS+margin:return False
+    return True
+
+
 def create_forest(ctx):
-    ctx.group('Forest');positions=[];island_count=0;target=max(0,ctx.cfg.tree_count//2)
-    # Only authored separator islands receive trees; no random scatter over the battlefield.
-    rng=random.Random(ctx.cfg.seed+57)
+    ctx.group('Forest');positions=[];target=ctx.cfg.tree_count//2;rng=random.Random(ctx.cfg.seed+57);island_count=0
+    # Island groups are authored; a deterministic dense packing fills each separator.
     for k,center in enumerate(TREE_ISLANDS_XZ):
         island=[]
-        for j in range(30):
+        for j in range(90):
             if len(positions)//2>=target:break
-            a=j*2.39996+k*.23;r=math.sqrt((j+.3)/30)*3.5;p=xz((center[0]+math.cos(a)*r,center[1]+math.sin(a)*r))
-            if not ctx.clear_for_foliage(p,.85):continue
-            if any(math.dist(p,q)<2.4 for q in positions):continue
-            if any(math.dist(p,xz(b))<4.0 for b in BUSH_XZ):continue
-            before=snapshot(ctx);o=create_tree(ctx,(*p,.12),rng.uniform(5.3,6.6),k%23);o['island_index']=k
-            pair=mirror_created(ctx,before,'Tree separator islands');positions.extend([p,turn(p)]);island.append(p)
-            if len(island)>=4:break
-        if island:
-            ctx.group('ForestIslandStones');before=snapshot(ctx);p=xz(center)
-            ctx.sphere('Low mossy separator island',(p[0],p[1],-.22),(3.5,3.0,.36),'Moss',2)
-            mirror_created(ctx,before,'Moss island bases');island_count+=1
-        ctx.group('Forest')
-    bushes=[]
-    for i,p in enumerate(BLUE_BUSH_XZ):
-        for side in [0,1]:
-            q=xz(turn(p) if side else p);root=create_bush(ctx,(*q,.14 if i==2 else .02),1,i)
-            root.rotation_euler.z=PI if side else 0;root['bush_id']=i+1+(13 if side else 0);root['mirror_id']=i+1+(0 if side else 13);bushes.append(q)
-    ctx.registry['trees']=positions;ctx.registry['bushes']=bushes
-    # Ruin walls occupy only island edges, leaving every authored path open.
-    ctx.group('Ruins')
-    for ci,center in enumerate([CLEARINGS['West'],CLEARINGS['South']]):
-        for j in range(10):
-            a=j*2*PI/10+.14;p=(center[0]+12.8*math.cos(a),center[1]+12.8*math.sin(a))
-            if any(min(route_distance((p[0]+math.cos(a+PI/2)*v,p[1]+math.sin(a+PI/2)*v),r) for r in ctx.paths)<4.0 for v in [-3.4,0,3.4]):continue
-            if any(math.dist(p,xz(b))<5 for b in BUSH_XZ):continue
-            before=snapshot(ctx);create_wall(ctx,'Polyanas mirrored antique wall',(*p,0),4.4,a+PI/2,j%2==0);mirror_created(ctx,before,'Clearing wall pairs')
-    print('SYMMETRIC FOREST',len(positions),'trees on',island_count*2,'separator islands;',len(bushes),'exact bushes',flush=True)
-
+            a=j*2.39996+k*.23;r=math.sqrt((j+.3)/90)*5.3;p=xz((center[0]+math.cos(a)*r,center[1]+math.sin(a)*r))
+            if not forest_obstacle_clear(ctx,p,1.05):continue
+            if any(math.dist(p,q)<2.7 for q in positions):continue
+            before=snapshot(ctx);o=create_tree(ctx,(*p,.06),rng.uniform(5.7,7.0),k%23);o['island_index']=k
+            mirror_created(ctx,before,'Dense emerald fir islands');positions.extend([p,turn(p)]);island.append(p)
+            if len(island)>=8:break
+        if island:island_count+=1
+    ctx.registry['trees']=positions
+    ctx.group('TallGrass')
+    for i,(center,angle,role) in enumerate(BLUE_BUSH_SPECS):
+        before=snapshot(ctx);root=create_bush(ctx,(*xz(center),.075),1,i);root.rotation_euler.z=-math.radians(angle)
+        root['bush_id']=i+1;root['mirror_id']=i+1+len(BLUE_BUSH_SPECS);root['role']=role
+        pair=mirror_created(ctx,before,'Tall grass pockets');other=pair[root];other['bush_id']=root['mirror_id'];other['mirror_id']=root['bush_id']
+    ctx.registry['bushes']=[xz(p) for p in BUSH_XZ]
+    # Short tangential ruins and jagged rock ends create pockets rather than river walls.
+    ctx.group('Ruins');placed=[]
+    candidates=[]
+    for c in [CLEARINGS['West'],CLEARINGS['South']]+[p for _,_,p in CAMPS[:6]]:
+        radius=12.4 if c in CLEARINGS.values() else 7.4
+        for j in range(16):
+            a=j*2*PI/16; candidates.append(((c[0]+radius*math.cos(a),c[1]+radius*math.sin(a)),a+PI/2))
+    for center in TREE_ISLANDS_XZ:
+        c=xz(center)
+        for j in range(4):
+            a=j*PI/2+.2;candidates.append(((c[0]+4*math.cos(a),c[1]+4*math.sin(a)),a+PI/2))
+    for p,angle in candidates:
+        if len(placed)>=24:break
+        d=(math.cos(angle),math.sin(angle));samples=[(p[0]+d[0]*v,p[1]+d[1]*v) for v in [-4.1,-3,-1.5,0,1.5,3,4.1]]
+        if not all(forest_obstacle_clear(ctx,q,1.2) for q in samples):continue
+        if any(math.dist(p,q)<6.5 for q in placed):continue
+        # Keep tree trunks out of masonry but allow the crowns to overhang its outer face.
+        if any(math.dist(p,q)<1.25 for q in positions):continue
+        before=snapshot(ctx);wall=create_wall(ctx,'Forest mossy ruin and crag barrier',(*p,0),4.6,angle,len(placed)%2==0)
+        old=ctx.parent;ctx.parent=wall
+        rock=create_rock(ctx,'Ruin merged weathered rock end',(2.7,.0,.65),(1.15,1.1,1.8),seed=500+len(placed))
+        proxy=ctx.box('Forest crag obstacle collider',(2.7,0,.65),(2.15,1.9,2.2),'Stone',0);proxy.hide_render=True;proxy['physics_only']=True;proxy['obstacle_collider']=True;proxy['obstacle_kind']='forest_crag'
+        ctx.parent=old;mirror_created(ctx,before,'Forest maze barriers');placed.append(p)
+    ctx.registry['forest_wall_count']=len(placed)*2
+    print('SYMMETRIC FOREST',len(positions),'trees on',island_count*2,'islands;',len(BUSH_XZ),'capsule grass pockets;',len(placed)*2,'ruin barriers',flush=True)
 
 def create_environment_details(ctx):
     ctx.group('BotanicalDetails');rng=random.Random(ctx.cfg.seed+812);count=0
@@ -1848,9 +2002,9 @@ def export_colliders(ctx):
     result=[];prefixes=('Ruin softly chamfered masonry','Ancient squared terminal pier','Crystal narrow passage sidewall')
     ctx.scene.view_layers[0].update()
     for obj in ctx.scene.objects:
-        if obj.type!='MESH' or not (obj.get('physics_collider') or obj.name.removeprefix(PREFIX).startswith(prefixes)):continue
+        if obj.type!='MESH' or not (obj.get('physics_collider') or obj.get('obstacle_collider') or obj.name.removeprefix(PREFIX).startswith(prefixes)):continue
         corners=[obj.matrix_world@Vector(p) for p in obj.bound_box];lo=[round(min(p[i] for p in corners),5) for i in range(2)];hi=[round(max(p[i] for p in corners),5) for i in range(2)]
-        result.append({'min':lo,'max':hi,'height':0,'perimeter':bool(obj.get('physics_collider'))})
+        result.append({'min':lo,'max':hi,'height':0,'perimeter':bool(obj.get('physics_collider')),'kind':obj.get('obstacle_kind','masonry'),'polygon':[[round((obj.matrix_world@Vector((x,y,0))).x,5),round((obj.matrix_world@Vector((x,y,0))).y,5)] for x,y in [(obj.bound_box[0][0],obj.bound_box[0][1]),(obj.bound_box[4][0],obj.bound_box[0][1]),(obj.bound_box[4][0],obj.bound_box[2][1]),(obj.bound_box[0][0],obj.bound_box[2][1])]]})
     return result
 
 
@@ -1858,7 +2012,7 @@ def export_layout(ctx,validation):
     def xy(p):return {'X':p[0],'Y':p[1]}
     def sample(r):return [xy(p) for p in catmull(r,4)]
     bushes=sorted([o for o in ctx.scene.objects if o.get('category')=='bush'],key=lambda o:o['bush_id'])
-    data={'name':'Долина Осколков','generator_version':'4.0','seed':ctx.cfg.seed,'coordinate_system':'Blender X/Y ground; Three.js X east, Z south, Y=0 physics','playable_size':200,'physics_plane_y':0,
+    data={'name':'Долина Осколков','generator_version':'4.1','seed':ctx.cfg.seed,'coordinate_system':'Blender X/Y ground; Three.js X east, Z south, Y=0 physics','playable_size':200,'physics_plane_y':0,
       'schema':{'axes':'X west→east; Z north→south','bases':BASE_XZ,'towers':TOWER_XZ,'arenas':ARENA_XZ,'boss_spawns':BOSS_SPAWN_XZ,'camps':[(i,k,(p[0],-p[1])) for i,k,p in CAMPS],'bushes':BUSH_XZ,'crystals':BLUE_GATES_XZ+mirrored(BLUE_GATES_XZ),'bridge_centers':[(-25,-25),(25,25)],'blue_bridge_entries':BRIDGE_ENTRIES_XZ},
       'towers':[{'team':t,'lane':lane,'tier':tier,'position':xy((x,y))} for lane,teams in TOWERS.items() for t,rows in teams.items() for tier,x,y in rows],
       'bases':{k:xy(p) for k,p in BASES.items()},'bosses':{k:xy(p) for k,p in BOSSES.items()},'fountains':{k:xy(p) for k,p in FOUNTAINS.items()},'clearings':{k:xy(p) for k,p in CLEARINGS.items()},
@@ -1866,25 +2020,28 @@ def export_layout(ctx,validation):
       'boss_approaches':[{'boss':i//2,'points':sample(r),'width':8} for i,r in enumerate(BOSS_APPROACHES)],
       'forest_paths':[sample(r) for r in FOREST_PATHS],
       'bush_access_paths':[sample(r) for r in BUSH_ACCESS],
-      'river_landings':[{'points':sample(r),'width':3.5,'island':xy(xz((-26,-24)) if i==0 else xz((26,24))),'radius':3.65} for i,r in enumerate(RIVER_LANDINGS)],
-      'shore_bush_pads':[{'position':xy(xz(p)),'radius':3.65} for p in [(-12,-4),(-26,-24),(12,4),(26,24)]],
+      'mountain_routes':[{'points':sample(r),'width':4.6} for r in MOUNTAIN_ROUTES],
+      'mountain_passages':[{'team':t,'lane':lane,'tier':tier,'points':sample(r),'width':3.6} for t,lane,tier,r in MOUNTAIN_PASSAGES],
+      'river_landings':[],'shore_bush_pads':[],
       'river_half_width':ctx.cfg.river_half_width,'river':[xy(p) for p in ctx.river],
       'camps':[{'id':i,'kind':kind,'position':xy(p)} for i,kind,p in CAMPS],
       'lanes':{k:[xy(p) for p in r] for k,r in ctx.lanes.items()},'stone_bridges':[{'lane':key,'position':xy(p)} for key,p in STONE_BRIDGES],'energy_bridges':[{'kind':key,'position':xy(p)} for key,p in ENERGY_BRIDGES],
-      'crystals':[{'id':i+1,'position':xy(p),'durability':24,'respawn_seconds':60,'side':'Light' if i<3 else 'Dark','role':['mid_bridge','magma_cut','semicircle'][i%3],'short_path':sample(GATE_PATHS[i])} for i,(p,t) in enumerate(CRYSTAL_GATES)],
-      'bushes':[{'id':o['bush_id'],'mirror_id':o['mirror_id'],'position':xy(o.location),'radius':3.2} for o in bushes],
+      'crystals':[{'id':i+1,'position':xy(p),'durability':24,'respawn_seconds':60,'side':'Light' if i<3 else 'Dark','role':['mid_forest','magma_cut','semicircle'][i%3],'short_path':sample(GATE_PATHS[i])} for i,(p,t) in enumerate(CRYSTAL_GATES)],
+      'bushes':[{'id':o['bush_id'],'mirror_id':o['mirror_id'],'position':xy(o.location),'radius':BUSH_RADIUS,'half_length':BUSH_HALF_LENGTH,'angle':-o.rotation_euler.z,'shape':'capsule','role':o['role']} for o in bushes],
+      'forest_surface':{'trail':'#C49A6C','grass':['#3E6B2C','#528738'],'clearing':['#9BB068','#C49A6C']},
       'trees':[xy(p) for p in ctx.registry['trees']],'tree_islands':[xy(xz(p)) for p in TREE_ISLANDS_XZ+mirrored(TREE_ISLANDS_XZ)],'colliders':export_colliders(ctx),'bounds':{'minX':-100,'maxX':100,'minZ':-100,'maxZ':100},
-      'backdrop_trees':ctx.registry['backdrop_tree_count'],'neutral_catalog':{'total':26,'forest':22,'rift':2,'bosses':2},'symmetry_pair_count':len(ctx.registry.get('symmetric_pairs',[])),'validation':validation}
+      'forest_wall_count':ctx.registry.get('forest_wall_count',0),'backdrop_trees':ctx.registry['backdrop_tree_count'],'neutral_catalog':{'total':26,'forest':22,'rift':2,'bosses':2},'symmetry_pair_count':len(ctx.registry.get('symmetric_pairs',[])),'validation':validation}
     (ctx.cfg.output/'ValleyOfShards.layout.json').write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
 
 
 def build_map(config):
     if bpy.app.version<(4,0,0):raise RuntimeError("Blender 4.0 or newer is required")
     config.output.mkdir(parents=True,exist_ok=True);ctx=Context(config)
-    create_materials(ctx);create_combat_materials(ctx);print("MATERIALS READY",flush=True)
+    create_materials(ctx);create_combat_materials(ctx);create_forest_materials(ctx);print("MATERIALS READY",flush=True)
     create_terrain(ctx)
     create_symmetric_lanes(ctx)
     create_symmetric_routes(ctx)
+    create_mountain_trails(ctx)
     create_river(ctx)
     for lane,p in STONE_BRIDGES:create_bridge(ctx,lane+" arched stone bridge",p)
     for name,p in ENERGY_BRIDGES:create_bridge(ctx,name+" dynamic forest bridge",p,"dawn" if name=="Dawn" else "dusk")
@@ -1904,7 +2061,7 @@ def build_map(config):
     for team in ["Light","Dark"]:
         for kind in ["Guard","Caster","Siege"]:create_minion_template(ctx,team,kind)
     for i,(p,toward) in enumerate(CRYSTAL_GATES,1):create_crystal_gate(ctx,i,p,toward)
-    create_gameplay_geometry(ctx);create_forest(ctx);create_environment_details(ctx);create_cliffs_and_waterfalls(ctx);create_outer_landscape(ctx);create_lighting_and_camera(ctx)
+    create_gameplay_geometry(ctx);create_forest(ctx);create_environment_details(ctx);print('FOREST DETAILS READY',flush=True);create_cliffs_and_waterfalls(ctx);print('CLIFFS READY',flush=True);create_outer_landscape(ctx);create_lighting_and_camera(ctx)
     validation=validate_scene(ctx);export_layout(ctx,validation)
     scene=ctx.scene;scene.frame_set(1)
     # Пакуем найденный системный шрифт. Процедурным материалам нечего искать на диске.
@@ -1940,7 +2097,7 @@ def parse_args():
     parser.add_argument("--out",type=Path,default=default);parser.add_argument("--seed",type=int,default=1649)
     parser.add_argument("--render",action="store_true");parser.add_argument("--detail-renders",action="store_true")
     parser.add_argument("--resolution",type=int,default=1440);parser.add_argument("--samples",type=int,default=32)
-    parser.add_argument("--trees",type=int,default=72);parser.add_argument("--no-labels",action="store_true")
+    parser.add_argument("--trees",type=int,default=240);parser.add_argument("--no-labels",action="store_true")
     args=parser.parse_args(argv)
     if args.trees<0 or args.trees>1000:parser.error("--trees must be between 0 and 1000")
     if args.resolution<320 or args.resolution>8192:parser.error("--resolution must be between 320 and 8192")

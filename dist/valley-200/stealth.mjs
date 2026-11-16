@@ -1,7 +1,9 @@
 // Stealth is a shared simulation rule, not a rendering-only effect.
+export function bushDistance(point,bush){const dx=point.x-bush.position.x,dz=point.z-bush.position.z,c=bush.cos??Math.cos(bush.angle??0),s=bush.sin??Math.sin(bush.angle??0),along=dx*c+dz*s,across=-dx*s+dz*c;return Math.hypot(Math.max(0,Math.abs(along)-(bush.halfLength??0)),across);}
 export class StealthBush{
- constructor({id,position,radius=3.2}){this.id=id;this.position={x:position.X??position.x??position[0],y:0,z:position.Z??position.z??-(position.Y??position[1])};this.radius=radius;this.occupants=new Set();}
- contains(hero){return hero.alive&&Math.hypot(hero.position.x-this.position.x,hero.position.z-this.position.z)<=this.radius;}
+ constructor({id,position,radius=3.2,half_length=0,angle=0}){this.id=id;this.position={x:position.X??position.x??position[0],y:0,z:position.Z??position.z??-(position.Y??position[1])};this.radius=radius;this.halfLength=half_length;this.angle=angle;this.cos=Math.cos(angle);this.sin=Math.sin(angle);this.occupants=new Set();}
+ containsPoint(point,padding=0){return bushDistance(point,this)<=this.radius+padding;}
+ contains(hero){return hero.alive&&this.containsPoint(hero.position);}
 }
 export class StealthSystem{
  constructor(specs=[],heroes=[],{actionRevealSeconds=2}={}){this.bushes=specs.map(s=>new StealthBush(s));this.heroes=new Map(heroes.map(h=>[h.id,h]));this.revealedUntil=new Map();this.membership=new Map();this.time=0;this.actionRevealSeconds=actionRevealSeconds;this.update(heroes,0);}

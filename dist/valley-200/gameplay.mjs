@@ -1,5 +1,6 @@
 // Planar map simulation. Every logical hero/projectile is (x, 0, z); render elevation is separate.
-import {MapState} from './model.mjs?v=200.5';
+import {StealthBush,bushDistance} from './stealth.mjs?v=200.6';
+import {MapState} from './model.mjs?v=200.6';
 export const RULES=Object.freeze({hz:30,heroRadius:.6,heroSpeed:8,heroHealth:1200,heroMana:500,fountainRadius:6.6,healHP:300,healMana:180,bridgeStart:120,bridgePeriod:120,bridgeWarning:15,ejectDuration:.65,crystalHP:24,meleeCrystalDamage:4,rangedCrystalDamage:3,crystalRespawn:60,meleeRange:3.2,rangedRange:9,attackPeriod:.55,projectileSpeed:22});
 const SQRT2=Math.SQRT2,EPS=1e-7;
 export const xy=p=>({x:p.X??p[0],y:0,z:-(p.Y??p[1])});
@@ -7,16 +8,19 @@ export const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const lerp=(a,b,t)=>({x:a.x+(b.x-a.x)*t,y:0,z:a.z+(b.z-a.z)*t});
 function segmentDistance(p,a,b){const dx=b.x-a.x,dz=b.z-a.z,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz||1)));return Math.hypot(p.x-a.x-dx*t,p.z-a.z-dz*t);}
 function routeDistance(p,points){let d=Infinity;for(let i=1;i<points.length;i++)d=Math.min(d,segmentDistance(p,points[i-1],points[i]));return d;}
+const routeBounds=new WeakMap();
+function routeWithin(p,points,radius){if(radius<0)return false;let box=routeBounds.get(points);if(!box){box={minX:Infinity,maxX:-Infinity,minZ:Infinity,maxZ:-Infinity};for(const q of points){box.minX=Math.min(box.minX,q.x);box.maxX=Math.max(box.maxX,q.x);box.minZ=Math.min(box.minZ,q.z);box.maxZ=Math.max(box.maxZ,q.z);}routeBounds.set(points,box);}if(p.x<box.minX-radius||p.x>box.maxX+radius||p.z<box.minZ-radius||p.z>box.maxZ+radius)return false;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];if(p.x<Math.min(a.x,b.x)-radius||p.x>Math.max(a.x,b.x)+radius||p.z<Math.min(a.z,b.z)-radius||p.z>Math.max(a.z,b.z)+radius)continue;if(segmentDistance(p,a,b)<=radius)return true;}return false;}
+export function obstacleContains(p,q,radius=.6){if(p.x<q.minX-radius||p.x>q.maxX+radius||p.z<q.minZ-radius||p.z>q.maxZ+radius)return false;if(!q.polygon)return true;let inside=false;const poly=q.polygon;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[j],b=poly[i];if(segmentDistance(p,a,b)<=radius)return true;if((a.z>p.z)!==(b.z>p.z)&&p.x<(b.x-a.x)*(p.z-a.z)/(b.z-a.z)+a.x)inside=!inside;}return inside;}
 export function bridgePhase(time){if(time<120-EPS)return {active:-1,next:120,warning:false,remaining:120-time};const cycle=Math.floor((time-120+EPS)/120),next=240+cycle*120;return {active:cycle%2,next,warning:time>=next-15-EPS,remaining:Math.max(0,next-time)};}
 export function bridgeLocal(p,bridge){const dx=p.x-bridge.x,dz=p.z-bridge.z;return {along:(dx-dz)/SQRT2,across:(dx+dz)/SQRT2};}
 class Heap{constructor(){this.data=[];}push(value){let i=this.data.length;this.data.push(value);while(i){const p=(i-1)>>1;if(this.data[p].f<=value.f)break;this.data[i]=this.data[p];i=p;this.data[i]=value;}}pop(){const first=this.data[0],end=this.data.pop();if(this.data.length){this.data[0]=end;let i=0;for(;;){let j=i*2+1;if(j>=this.data.length)break;if(j+1<this.data.length&&this.data[j+1].f<this.data[j].f)j++;if(this.data[i].f<=this.data[j].f)break;[this.data[i],this.data[j]]=[this.data[j],this.data[i]];i=j;}}return first;}get size(){return this.data.length;}}
 export class PlanarNavigation{
- constructor(layout,entities,state){this.layout=layout;this.entities=entities;this.state=state;this.step=1;this.min=-102;this.count=205;this.revision=0;
+ constructor(layout,entities,state){this.layout=layout;this.entities=entities;this.state=state;this.step=.5;this.min=-102;this.count=409;this.revision=0;this.edgeState=null;this.edgeCache=new Map();
   this.lanes=Object.values(layout.lanes).map(r=>r.map(xy));this.arenas=Object.values(layout.bosses).map(xy);this.bases=Object.values(layout.bases).map(xy);this.fountains=Object.values(layout.fountains).map(xy);this.camps=layout.camps.map(c=>xy(c.position));this.clearings=Object.values(layout.clearings).map(xy);
-  this.paths=layout.forest_paths.map(r=>({points:r.map(xy),half:1.8}));this.paths.push(...(layout.bush_access_paths??[]).map(r=>({points:r.map(xy),half:1.8})));this.bushes=(layout.bushes??[]).map(b=>({...xy(b.position),radius:b.radius}));this.landings=(layout.river_landings??[]).map(r=>({points:r.points.map(xy),half:r.width/2}));this.shorePads=(layout.shore_bush_pads??[]).map(b=>({...xy(b.position),radius:b.radius}));this.paths.push(...layout.tower_passages.map(r=>({points:r.points.map(xy),half:1.8})),...layout.boss_approaches.map(r=>({points:r.points.map(xy),half:4})),...layout.crystals.map(c=>({points:c.short_path.map(xy),half:1.75})));
+  this.paths=layout.forest_paths.map(r=>({points:r.map(xy),half:1.8}));this.paths.push(...(layout.bush_access_paths??[]).map(r=>({points:r.map(xy),half:1.8})));this.bushes=(layout.bushes??[]).map(b=>new StealthBush(b));this.landings=(layout.river_landings??[]).map(r=>({points:r.points.map(xy),half:r.width/2}));this.shorePads=(layout.shore_bush_pads??[]).map(b=>({...xy(b.position),radius:b.radius}));this.paths.push(...(layout.mountain_routes??[]).map(r=>({points:r.points.map(xy),half:r.width/2})),...(layout.mountain_passages??[]).map(r=>({points:r.points.map(xy),half:r.width/2})));this.paths.push(...layout.tower_passages.map(r=>({points:r.points.map(xy),half:1.8})),...layout.boss_approaches.map(r=>({points:r.points.map(xy),half:4})),...layout.crystals.map(c=>({points:c.short_path.map(xy),half:1.75})));
   for(const team of ['Light','Dark'])this.paths.push({points:[xy(layout.bases[team]),xy(layout.fountains[team])],half:3});
   this.river=layout.river.map(xy);this.riverHalf=layout.river_half_width;this.bridges=layout.energy_bridges.map(b=>xy(b.position));this.stone=layout.stone_bridges.map(b=>xy(b.position));this.towers=entities.filter(e=>e.category==='tower').map(e=>({...xy(e.position),id:e.id}));
-  this.gates=entities.filter(e=>e.category==='crystal_gate').map(e=>({id:e.id,p:xy(e.position)}));this.trees=layout.trees.map(xy);this.rects=(layout.colliders??[]).map(r=>({minX:r.min[0],maxX:r.max[0],minZ:-r.max[1],maxZ:-r.min[1]}));
+  this.gates=entities.filter(e=>e.category==='crystal_gate').map(e=>({id:e.id,p:xy(e.position)}));this.trees=layout.trees.map(xy);this.rects=(layout.colliders??[]).map(r=>({minX:r.min[0],maxX:r.max[0],minZ:-r.max[1],maxZ:-r.min[1],polygon:r.polygon?.map(p=>({x:p[0],z:-p[1]}))}));
   this.mask=new Uint8Array(this.count*this.count);this.riverMask=new Uint8Array(this.mask.length);for(let z=0;z<this.count;z++)for(let x=0;x<this.count;x++){const p=this.point(z*this.count+x);this.mask[z*this.count+x]=this.staticWalkable(p)?1:0;this.riverMask[z*this.count+x]=this.isRiver(p)?1:0;}
  }
  point(i){return {x:this.min+(i%this.count)*this.step,y:0,z:this.min+Math.floor(i/this.count)*this.step};}
@@ -24,14 +28,14 @@ export class PlanarNavigation{
  inArena(p){return this.arenas.some(a=>dist(p,a)<=14.6);}
  onStone(p){return this.stone.some(b=>{const q=bridgeLocal(p,b);return Math.abs(q.along)<=10.6&&Math.abs(q.across)<=4.0;});}
  onBridge(p,index,padding=0){const q=bridgeLocal(p,this.bridges[index]);return Math.abs(q.along)<=11.5+padding&&Math.abs(q.across)<=2.2+padding;}
- permanentLanding(p){return this.shorePads.some(q=>dist(p,q)<=q.radius-RULES.heroRadius)||this.landings.some(q=>routeDistance(p,q.points)<=q.half-RULES.heroRadius);}
- isRiver(p){return !this.inArena(p)&&!this.permanentLanding(p)&&routeDistance(p,this.river)<this.riverHalf+RULES.heroRadius;}
- staticWalkable(p){const r=RULES.heroRadius;if(Math.abs(p.x)>100-r||Math.abs(p.z)>100-r)return false;
-  const inside=this.permanentLanding(p)||this.bushes.some(b=>dist(p,b)<=b.radius-r)||this.inArena(p)||this.bases.some(q=>dist(p,q)<=15.1-r)||this.fountains.some(q=>dist(p,q)<=7-r)||this.clearings.some(q=>dist(p,q)<=10.6-r)||this.camps.some(q=>dist(p,q)<=5.45-r)||this.lanes.some(q=>routeDistance(p,q)<=5.2-r)||this.paths.some(q=>routeDistance(p,q.points)<=q.half-r)||this.bridges.some((_,i)=>this.onBridge(p,i))||this.onStone(p);
+ permanentLanding(p){return this.shorePads.some(q=>dist(p,q)<=q.radius-RULES.heroRadius)||this.landings.some(q=>routeWithin(p,q.points,q.half-RULES.heroRadius));}
+ isRiver(p){return !this.inArena(p)&&!this.permanentLanding(p)&&routeWithin(p,this.river,this.riverHalf+RULES.heroRadius);}
+ staticWalkable(p,clearance=0){const r=RULES.heroRadius+clearance;if(Math.abs(p.x)>100-r||Math.abs(p.z)>100-r)return false;
+  const inside=this.permanentLanding(p)||this.bushes.some(b=>bushDistance(p,b)<=b.radius-r)||this.inArena(p)||this.bases.some(q=>dist(p,q)<=15.1-r)||this.fountains.some(q=>dist(p,q)<=7-r)||this.clearings.some(q=>dist(p,q)<=10.6-r)||this.camps.some(q=>dist(p,q)<=6.25-r)||this.lanes.some(q=>routeWithin(p,q,5.2-r))||this.paths.some(q=>routeWithin(p,q.points,q.half-r))||this.bridges.some((_,i)=>this.onBridge(p,i))||this.onStone(p);
   if(!inside)return false;
   if(this.towers.some(q=>(!this.state.structures||this.state.structures.get(q.id)?.alive!==false)&&dist(p,q)<2.65+r)||this.bases.some(q=>dist(p,q)<3.1+r))return false;
   if(this.trees.some(q=>dist(p,q)<.35+r))return false;
-  if(this.rects.some(q=>p.x>q.minX-r&&p.x<q.maxX+r&&p.z>q.minZ-r&&p.z<q.maxZ+r))return false;
+  if(this.rects.some(q=>obstacleContains(p,q,r)))return false;
   return true;
  }
  dynamicWalkable(p,isRiver=this.isRiver(p)){
@@ -39,14 +43,14 @@ export class PlanarNavigation{
   if(this.gates.some(g=>this.state.crystals.get(g.id)?.hp>0&&dist(p,g.p)<2.25+RULES.heroRadius))return false;
   return true;
  }
- walkable(p){return Number.isFinite(p.x)&&Number.isFinite(p.z)&&this.staticWalkable(p)&&this.dynamicWalkable(p);}
+ walkable(p,clearance=0){return Number.isFinite(p.x)&&Number.isFinite(p.z)&&this.staticWalkable(p,clearance)&&this.dynamicWalkable(p);}
  gridOK(i){return i>=0&&i<this.mask.length&&this.mask[i]&&this.dynamicWalkable(this.point(i),!!this.riverMask[i]);}
- nearest(p,radius=4){if(this.walkable(p))return {...p,y:0};let best=null,error=Infinity;const sign=p.x<0||p.x===0&&p.z<0?1:-1;for(let dz=-radius;dz<=radius;dz++)for(let dx=-radius;dx<=radius;dx++){const q={x:Math.round(p.x)+dx*sign,y:0,z:Math.round(p.z)+dz*sign},d=dist(p,q);if(d<error&&this.walkable(q)){best=q;error=d;}}return best;}
- segmentClear(a,b){const n=Math.max(1,Math.ceil(dist(a,b)/.4));for(let i=0;i<=n;i++)if(!this.walkable(lerp(a,b,i/n)))return false;return true;}
- find(start,goal){const a=this.nearest(start,3),b=this.nearest(goal,3);if(!a||!b)return null;if(this.segmentClear(a,b))return [b];const si=this.index(a),gi=this.index(b);if(si<0||gi<0||!this.gridOK(si)||!this.gridOK(gi))return null;
+ nearest(p,radius=4){if(this.walkable(p))return {...p,y:0};let best=null,error=Infinity;const sign=p.x<0||p.x===0&&p.z<0?1:-1;for(let dz=-Math.ceil(radius/this.step);dz<=Math.ceil(radius/this.step);dz++)for(let dx=-Math.ceil(radius/this.step);dx<=Math.ceil(radius/this.step);dx++){const q={x:this.step*(Math.round(p.x/this.step)+dx*sign),y:0,z:this.step*(Math.round(p.z/this.step)+dz*sign)},d=dist(p,q);if(d<error&&this.walkable(q)){best=q;error=d;}}return best;}
+ segmentClear(a,b){const n=Math.max(1,Math.ceil(dist(a,b)/.2));for(let i=0;i<=n;i++)if(!this.walkable(lerp(a,b,i/n),i===0||i===n?0:.12))return false;return true;}
+ find(start,goal){const edgeState=this.state.bridge.active+':'+this.gates.map(g=>this.state.crystals.get(g.id)?.hp>0?1:0).join('')+':'+this.towers.map(q=>this.state.structures?.get(q.id)?.alive===false?0:1).join('');if(this.edgeState!==edgeState){this.edgeState=edgeState;this.edgeCache.clear();}const a=this.nearest(start,3),b=this.nearest(goal,3);if(!a||!b)return null;if(this.segmentClear(a,b))return [b];const si=this.index(a),gi=this.index(b);if(si<0||gi<0||!this.gridOK(si)||!this.gridOK(gi))return null;
   const open=new Heap(),cost=new Float64Array(this.mask.length),parent=new Int32Array(this.mask.length),seen=new Uint8Array(this.mask.length);cost.fill(Infinity);parent.fill(-1);cost[si]=0;open.push({id:si,f:dist(a,b)});const orientation=a.x||a.z?a:b,sign=orientation.x<0||orientation.x===0&&orientation.z<0?1:-1,offsets=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]].map(([x,z])=>[x*sign,z*sign]);
   while(open.size){const cur=open.pop().id;if(seen[cur])continue;seen[cur]=1;if(cur===gi){const raw=[];let i=gi;while(i!==si){raw.push(this.point(i));i=parent[i];if(i<0)return null;}raw.reverse();raw.push(b);const result=[];let anchor=a,j=0;while(j<raw.length){let k=j;while(k+1<raw.length&&this.segmentClear(anchor,raw[k+1]))k++;result.push(raw[k]);anchor=raw[k];j=k+1;}return result;}
-   const x=cur%this.count,z=Math.floor(cur/this.count);for(const [dx,dz]of offsets){const nx=x+dx,nz=z+dz;if(nx<0||nz<0||nx>=this.count||nz>=this.count)continue;const n=nz*this.count+nx;if(seen[n]||!this.gridOK(n))continue;if(dx&&dz&&(!this.gridOK(z*this.count+nx)||!this.gridOK(nz*this.count+x)))continue;const g=cost[cur]+(dx&&dz?SQRT2:1);if(g<cost[n]){cost[n]=g;parent[n]=cur;open.push({id:n,f:g+dist(this.point(n),b)});}}
+   const x=cur%this.count,z=Math.floor(cur/this.count);for(const [dx,dz]of offsets){const nx=x+dx,nz=z+dz;if(nx<0||nz<0||nx>=this.count||nz>=this.count)continue;const n=nz*this.count+nx;if(seen[n]||!this.gridOK(n))continue;if(dx&&dz&&(!this.gridOK(z*this.count+nx)||!this.gridOK(nz*this.count+x)))continue;const edge=Math.min(cur,n)*this.mask.length+Math.max(cur,n);let clear=this.edgeCache.get(edge);if(clear===undefined){clear=this.segmentClear(this.point(cur),this.point(n));this.edgeCache.set(edge,clear);}if(!clear)continue;const g=cost[cur]+this.step*(dx&&dz?SQRT2:1);if(g<cost[n]){cost[n]=g;parent[n]=cur;open.push({id:n,f:g+dist(this.point(n),b)});}}
   }return null;
  }
 }

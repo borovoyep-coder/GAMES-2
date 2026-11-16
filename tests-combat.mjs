@@ -28,4 +28,4 @@ console.log('PASS siege building hits, tower counterfire, planar projectiles and
 // Integration: fixed waypoint routes, no jungle/dynamic crossing, encounter damage.
 w.reset();let attacks=0;for(let i=0;i<3600;i++){w.tick(1/30);for(const u of w.minions.values()){eq(u.position.y,0);assert.ok(w.routes.get(u.lane).project(u.position).distance<5.1);assert.ok(u.progress>=0&&u.progress<=w.routes.get(u.lane).length);if(u.state==='AttackTarget')attacks++;if(u.target){const target=w.combatant(u.target);assert.ok(target);assert.equal(w.neutrals.has(target.id),false);}}}assert.ok(attacks>0);assert.ok(w.waveLog.some(v=>v.number===3&&v.composition.includes('Siege')));assert.ok([...w.minions.values()].some(u=>u.team==='Light'));assert.ok([...w.minions.values()].some(u=>u.team==='Dark'));
 console.log('PASS two-minute integration: balanced lane encounters; isolated siege/counterfire checked above, all units stay on their fixed lane and Y=0');
-console.log('COMBAT 200.5 CHECKS PASSED; browser rendering not executed.');
+console.log('COMBAT 200.6 CHECKS PASSED; browser rendering not executed.');
