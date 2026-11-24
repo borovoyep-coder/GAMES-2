@@ -13,4 +13,4 @@ w.reset();w.advanceTo(120);w.player.position=xy(l.bushes.find(b=>b.id===3).posit
 console.log('PASS both bridge closures, both banks, ten smooth safe ejections; dry riverbank grass remains available');
 w.reset();const goal=xy(l.bushes.find(b=>b.id===8).position);assert.ok(w.issue({type:'move',point:{...goal,y:99}}).ok);for(let i=0;i<1500;i++){w.tick(1/30);assert.equal(w.player.position.y,0);}assert.ok(dist(w.player.position,goal)<.2);assert.equal(w.issue({type:'move',point:{x:102,y:0,z:0}}).ok,false);
 console.log('PASS actual planar movement to a bush and physical boundary rejection');
-console.log('GAMEPLAY 200.8 CHECKS PASSED');
+console.log('GAMEPLAY 200.9 CHECKS PASSED');

@@ -29,4 +29,4 @@ for(const r of l.mountain_routes)assert.ok(w.nav.find(xy(r.points[0]),xy(r.point
 w.reset();w.nextWave=Infinity;const edgeClick={x:-75,y:0,z:18};assert.ok(w.nav.surfaceIndex.contains(edgeClick,0));assert.ok(w.issue({type:'move',point:edgeClick}).ok);assert.ok(w.nav.walkable(w.player.goal));assert.ok(dist(edgeClick,w.player.goal)<=.75);
 console.log('PASS smooth side-tower curves, twelve mountain connections, baked collision samples and malformed run guards');
 w.reset();w.nextWave=Infinity;w.advanceTo(20);const monster=[...w.neutrals.values()].find(n=>n.kind==='MagmaGuardian'&&n.camp===1),angle=Math.PI/4,goal={x:monster.home.x+Math.cos(angle)*8.1,y:0,z:monster.home.z+Math.sin(angle)*8.1};for(let i=0;i<180;i++){w.moveNeutral(monster,goal,1/30);assert.ok(w.nav.walkable(monster.position),'Neutral walked through a pocket wall');assert.equal(monster.position.y,0);}console.log('PASS neutral movement respects the same pocket walls');
-console.log('FOREST 200.8 CHECKS PASSED; CPU verification; browser/WebGL not run.');
+console.log('FOREST 200.9 CHECKS PASSED; CPU verification; browser/WebGL not run.');

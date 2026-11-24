@@ -1,7 +1,7 @@
 // Planar map simulation. Every logical hero/projectile is (x, 0, z); render elevation is separate.
-import {SpatialIndex,shapeContains,decodeRuns} from './navigation-shapes.mjs?v=200.8';
-import {StealthBush,bushDistance} from './stealth.mjs?v=200.8';
-import {MapState} from './model.mjs?v=200.8';
+import {SpatialIndex,shapeContains,decodeRuns} from './navigation-shapes.mjs?v=200.9';
+import {StealthBush,bushDistance} from './stealth.mjs?v=200.9';
+import {MapState} from './model.mjs?v=200.9';
 export const RULES=Object.freeze({hz:30,heroRadius:.6,heroSpeed:8,heroHealth:1200,heroMana:500,fountainRadius:6.6,healHP:300,healMana:180,bridgeStart:120,bridgePeriod:120,bridgeWarning:15,ejectDuration:.65,crystalHP:24,meleeCrystalDamage:4,rangedCrystalDamage:3,crystalRespawn:60,meleeRange:3.2,rangedRange:9,attackPeriod:.55,projectileSpeed:22});
 const SQRT2=Math.SQRT2,EPS=1e-7;
 export const xy=p=>({x:p.X??p[0],y:0,z:-(p.Y??p[1])});

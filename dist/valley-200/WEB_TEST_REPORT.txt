@@ -1,9 +1,40 @@
+PAINTED TEXTURES: 6 packed tileable 768x768 maps with veins, scales and woven cloth
+MATERIALS READY
+MAZE FOREST 450 firs; 334 wall arc colliders; 44 grass pockets
+FOREST DETAILS READY
+CLIFFS READY
+VALIDATION PASS: 200x200, 18 exact towers, 2 bases, 2 bosses, 12 camps, 4 clearings, 6 gates, 3 stone + 2 energy bridges
+BAKING MAZE NAVIGATION
+MAZE NAV BAKED 817 x 817 214061 walkable cells
+Info: Saved "ValleyOfShards.blend"
+SAVED /workspace/valley-of-shards-generator/test-output/ValleyOfShards.blend
+GENERATION COMPLETE {"categories": {"arena": 2, "backdrop_tree": 210, "boss": 2, "bush": 44, "camp": 12, "clearing": 4, "crystal_gate": 6, "energy_bridge": 2, "forest_mass": 2, "fountain": 2, "hero": 10, "minion_template": 6, "neutral": 24, "nexus": 2, "playable_terrain": 1, "river": 1, "room_wall": 16, "ruin": 20, "shore_wall": 8, "stone_bridge": 3, "tower": 18, "tree": 450, "waterfall": 6}, "objects": 11858, "unique_meshes": 4364}
+PAINTED TEXTURES: 6 packed tileable 768x768 maps with veins, scales and woven cloth
+MATERIALS READY
+MAZE FOREST 450 firs; 334 wall arc colliders; 44 grass pockets
+FOREST DETAILS READY
+CLIFFS READY
+VALIDATION PASS: 200x200, 18 exact towers, 2 bases, 2 bosses, 12 camps, 4 clearings, 6 gates, 3 stone + 2 energy bridges
+BAKING MAZE NAVIGATION
+MAZE NAV BAKED 817 x 817 214061 walkable cells
+Info: Saved "ValleyOfShards.blend"
+SAVED /workspace/valley-of-shards-generator/test-output/ValleyOfShards.blend
+GENERATION COMPLETE {"categories": {"arena": 2, "backdrop_tree": 210, "boss": 2, "bush": 44, "camp": 12, "clearing": 4, "crystal_gate": 6, "energy_bridge": 2, "forest_mass": 2, "fountain": 2, "hero": 10, "minion_template": 6, "neutral": 24, "nexus": 2, "playable_terrain": 1, "river": 1, "room_wall": 16, "ruin": 20, "shore_wall": 8, "stone_bridge": 3, "tower": 18, "tree": 450, "waterfall": 6}, "objects": 11858, "unique_meshes": 4364}
+PASS deterministic generation, preserved user scene, six gates, 44 grass pockets, four continuous perimeter colliders
+PASS all authored geometry pairs at two animation frames, shared mesh topology and camp counts
+PASS crystal shatter and restoration; ten planar heroes and six minion templates
+ALL GENERATOR INTEGRATION CHECKS PASSED
+Blender 4.3.2
+
+Blender quit
+Error: Not freed memory blocks: 3, total unfreed memory 0.724579 MB
+
 PASS exact 18 tower coordinates, two bases, two bosses, 12 camps, four clearings, six gates and five bridges
-PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 736 meshes 3817540 vertices 2301980 triangles
+PASS binary meshes: finite positions, unit normals, valid UV/index/owner streams, SHA-256 722 meshes 3480514 vertices 2165271 triangles
 PASS 300 actor transforms, particle tracks and axis conversion
 PASS all six crystals: six hits, dead-state guard, 60-second restoration, manual restore, invalid damage
 PASS descriptions, DOM bindings, local links, shader injection targets and source archive
-PASS four exported image textures, ten physical hero roots at Y=0 and fountain metadata
+PASS six exported image textures, ten physical hero roots at Y=0 and fountain metadata
 PASS preserved Blender hierarchy, six minion models, twenty joints and 26 neutral roots
 VALLEY200 CPU CHECKS PASSED; WebGL rendering/browser interaction not executed.
 
@@ -12,33 +43,35 @@ PASS six crystals: six melee / eight ranged hits, attack cooldown, 60-second res
 PASS allied fountain healing/mana, enemy exclusion, trigger radius and maximum clamping
 PASS both bridge closures, both banks, ten smooth safe ejections; dry riverbank grass remains available
 PASS actual planar movement to a bush and physical boundary rejection
-GAMEPLAY 200.8 CHECKS PASSED
+GAMEPLAY 200.9 CHECKS PASSED
 
 PASS exact catalog: 22 forest + 2 rift + 2 bosses, spawn boundaries 0:20, 1:00, 3:00 and 7:00
+PASS all 18 towers: 6500/8000/10000 HP, two siege hits survive, 20% minion plating, full hero damage and projectile source cleanup
 PASS 65-second group respawn after last wolf, synchronized restoration, 90-second rift respawn
 PASS simultaneous six lane groups at 0:10, 25-second cadence, every third siege and siege in every wave after 10:00
 PASS real Colossus death: two team-wide waves, +15% HP, +10% building damage, unmodified unit damage; 180/240-second boss respawn
 PASS target priority minion → building → hero, no neutral targeting, no movement toward escaped heroes
 PASS defensive 2-second aggro and immediate lane/range restriction
 PASS siege building hits, tower counterfire, planar projectiles and 1.5-second death lifetime
+PASS every mid minion formation avoids camp walls around the repositioned towers
 PASS two-minute integration: balanced lane encounters; isolated siege/counterfire checked above, all units stay on their fixed lane and Y=0
-COMBAT 200.8 CHECKS PASSED; browser rendering not executed.
+COMBAT 200.9 CHECKS PASSED; browser rendering not executed.
 
 PASS actual Blender minion meshes: six templates, joints, walk/attack poses, four wheel rotations, cannon recoil and caster hover
 PASS 1.5-second death visibility, eight fragments, isolated fading materials, cleanup and CPU ray picking
-ANIMATION CPU 200.8 CHECKS PASSED; no browser/WebGL render executed.
+ANIMATION CPU 200.9 CHECKS PASSED; no browser/WebGL render executed.
 
 PASS exact independent coordinate tables: 18 towers, 12 camps, bases/arenas, four objective spawns, six gates and 44 grass pockets
 PASS all 667,489 mask cells and mirrored A* paths, reachable bushes/camps/arenas, 18 side paths and closed square perimeter
 PASS all six crystal shortcuts actually shorten navigation after destruction
 PASS rotational minion formation and structure bypasses on every lane
-SYMMETRY 200.8 CHECKS PASSED
+SYMMETRY 200.9 CHECKS PASSED
 
 PASS immediate bush concealment, allied 0.45 opacity, opposing model hidden and independent hero materials
 PASS same-bush mutual sight, enemy exit, damage and ability reveal with 2-second duration and refresh
 PASS actual targeting filters, attack rejection, target reset and loss of homing shots for concealed heroes
 PASS real crystal damage publishes the same reveal event
-STEALTH 200.8 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.
+STEALTH 200.9 CHECKS PASSED; CPU rendering-state verification, no browser/WebGL execution.
 
 PASS widened trail widths, six exact gate positions, sixteen enclosed pockets and dense forest fill
 PASS 40–50% fewer trees in groups of 3–6, widened lateral clearance, four direct base exits and continuous parapets with five bridge openings
@@ -46,4 +79,4 @@ PASS all rooms reachable, narrow authorised doorways open, enclosing wall arcs a
 PASS all twelve battle entrances covered by grass and actual planar hero movement to all forty-four thickets
 PASS smooth side-tower curves, twelve mountain connections, baked collision samples and malformed run guards
 PASS neutral movement respects the same pocket walls
-FOREST 200.8 CHECKS PASSED; CPU verification; browser/WebGL not run.
+FOREST 200.9 CHECKS PASSED; CPU verification; browser/WebGL not run.
