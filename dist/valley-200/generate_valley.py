@@ -37,7 +37,7 @@ def route_xz(points):return [xz(p) for p in points]
 def mirrored(points):return [turn(p) for p in points]
 TOWER_XZ={
  'Top':{'Light':[(3,-80,35),(2,-80,5),(1,-80,-25)],'Dark':[(3,45,-80),(2,15,-80),(1,-15,-80)]},
- 'Mid':{'Light':[(3,-48,48),(2,-30,30),(1,-14,14)],'Dark':[(3,48,-48),(2,30,-30),(1,14,-14)]},
+ 'Mid':{'Light':[(3,-54,54),(2,-35,35),(1,-18,18)],'Dark':[(3,54,-54),(2,35,-35),(1,18,-18)]},
  'Bot':{'Light':[(3,-45,80),(2,-15,80),(1,15,80)],'Dark':[(3,80,-35),(2,80,-5),(1,80,25)]}}
 TOWERS={lane:{team:[(tier,x,-z) for tier,x,z in rows] for team,rows in teams.items()} for lane,teams in TOWER_XZ.items()}
 BASE_XZ={'Light':(-80,80),'Dark':(80,-80)};BASES={k:xz(p) for k,p in BASE_XZ.items()}
@@ -270,7 +270,7 @@ class Context:
         self.scene=bpy.data.scenes.new(SCENE_NAME)
         if bpy.context.window:bpy.context.window.scene=self.scene
         if temporary:bpy.data.scenes.remove(temporary)
-        self.scene["generator_version"]="5.1"
+        self.scene["generator_version"]="5.2"
         self.scene["seed"]=config.seed
         self.scene["playable_bounds"]=[-100,100,-100,100]
         self.scene["coordinate_system"]="Blender XY ground; Z up"
@@ -585,7 +585,7 @@ def create_river(ctx):
     length=route_length(points)
     for i in range(58):
         x=math.sin(i*2.39)*2.8;shape=[(x+.07*math.sin(j*1.5),-.45+j*.18,0) for j in range(6)]
-        obj=ctx.curve("Animated river foam",shape,.028,"Foam")
+        obj=ctx.curve("Animated river foam",shape,.045,"Foam")
         for frame in range(1,ctx.cfg.frames+2,12):
             s=(length*i/58+(frame-1)*.075)%length;p=route_sample(points,s);q=route_sample(points,min(length,s+.3));obj.location=(p[0],p[1],-.69);obj.rotation_euler.z=-math.atan2(q[0]-p[0],q[1]-p[1]);obj.keyframe_insert("location",frame=frame);obj.keyframe_insert("rotation_euler",frame=frame)
         for curve in action_curves(obj):
@@ -2134,6 +2134,8 @@ def parse_args():
 
 import maze_scene
 maze_scene.install(globals())
+import art_upgrade
+art_upgrade.install(globals())
 
 if __name__=="__main__":
     build_map(parse_args())

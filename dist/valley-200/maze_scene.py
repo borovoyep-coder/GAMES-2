@@ -197,7 +197,7 @@ def create_fir(ctx,p,height,variant):
    for row,(rr,zz) in enumerate([(r*.79,z),(r,z+.16),(r*.53,z+.85),(.014,z+1.62)]):
     for j in range(n):
      a=j*2*math.pi/n+phase;scallop=(1 if j%2==0 else .80)*(1+.045*math.sin(j*2.1+tier));verts.append((math.cos(a)*rr*scallop,math.sin(a)*rr*scallop,zz+.06*math.sin(j*1.7)))
-     f=min(1,.08+row*.23+tier*.045);colors.append(G['blend_color'](G['srgb']('17391E'),G['srgb']('3B7346'),f))
+     f=min(1,.08+row*.23+tier*.045);colors.append(G['blend_color'](G['srgb']('123F31'),G['srgb']('398B59'),f))
    for row in range(3):
     for j in range(n):faces.append((start+row*n+j,start+row*n+(j+1)%n,start+(row+1)*n+(j+1)%n,start+(row+1)*n+j))
   proto=ctx.mesh('Six tier hand-painted spruce prototype',verts,faces,'SprucePaint');G['paint_mesh'](ctx,proto,colors,'SprucePaint');ctx.cache[key]=proto.data;bpy.data.objects.remove(proto,do_unlink=True)
@@ -284,7 +284,7 @@ def create_forest(ctx):
 def export_layout(ctx,validation):
  old=G['_old_export'];old(ctx,validation);p=ctx.cfg.output/'ValleyOfShards.layout.json';data=json.loads(p.read_text())
  def sample(r):return [{'X':q[0],'Y':q[1]} for q in curve(r)]
- data['generator_version']='5.1';data['forest_paths']=[sample(r) for r in G['FOREST_PATHS']];data['bush_access_paths']=[sample(r) for r in G['BUSH_ACCESS']]
+ data['generator_version']='5.2';data['forest_paths']=[sample(r) for r in G['FOREST_PATHS']];data['bush_access_paths']=[sample(r) for r in G['BUSH_ACCESS']]
  data['tower_passages']=[{'team':t,'lane':lane,'tier':tier,'points':sample(r),'width':mp.TRAIL_WIDTH} for t,lane,tier,r in G['TOWER_PASSAGES']]
  data['boss_approaches']=[{'boss':i//2,'points':sample(r),'width':4} for i,r in enumerate(G['BOSS_APPROACHES'])]
  data['mountain_routes']=[{'points':sample(r),'width':mp.MOUNTAIN_WIDTH} for r in G['MOUNTAIN_ROUTES']]
